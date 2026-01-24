@@ -1,0 +1,72 @@
+{
+    "name": "forest3d (CPU)",
+    "build": {
+        "dockerfile": "../../Dockerfile",
+        "target": "cpu"
+    },
+    "remoteEnv": {
+        "PYTHONPATH": "/code/forest3d"
+    },
+    "remoteUser": "${localEnv:USER}",
+    "updateRemoteUserUID": true,
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils": {
+            "username": "${localEnv:USER}",
+            "installNano": true,
+            "installZsh": true,
+            "installOhMyZsh": true,
+            "installOhMyZshConfig": true,
+            "configureZshAsDefaultShell": true
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "charliermarsh.ruff",
+                "github.vscode-github-actions",
+                "github.vscode-pull-request-github",
+                "johnpapa.vscode-peacock",
+                "ms-azuretools.vscode-docker",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "ms-python.mypy-type-checker",
+                "ms-python.python",
+                "ms-toolsai.jupyter-keymap",
+                "ms-toolsai.jupyter-renderers",
+                "ms-toolsai.jupyter",
+                "vscode-icons-team.vscode-icons"
+            ],
+            "settings": {
+                "mypy-type-checker.args": [
+                    "--config-file",
+                    "mypy.ini"
+                ],
+                "notebook.formatOnSave.enabled": true,
+                "python.defaultInterpreterPath": "/usr/bin/python3",
+                "python.analysis.extraPaths": [
+                    "/code/forest3d"
+                ],
+                "python.linting.mypyEnabled": true,
+                "python.linting.enabled": true,
+                "[python]": {
+                    "editor.formatOnSave": true,
+                    "editor.defaultFormatter": "charliermarsh.ruff",
+                    "editor.codeActionsOnSave": {
+                        "source.fixAll": "explicit",
+                        "source.organizeImports": "explicit"
+                    },
+                    "terminal.integrated.env.linux": {
+                        "PYTHONPATH": "/code/forest3d"
+                    }
+                }
+            }
+        }
+    },
+    "runArgs": [
+        "--name",
+        "forest3d-dev-cpu"
+    ],
+    "postCreateCommand": "pip freeze > /tmp/constraints.txt && sudo uv pip install --system -c /tmp/constraints.txt -r requirements-dev.txt && pre-commit install",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/code/forest3d,type=bind",
+    "workspaceFolder": "/code/forest3d"
+}

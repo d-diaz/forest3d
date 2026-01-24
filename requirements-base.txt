@@ -1,0 +1,13 @@
+geopandas
+ipyvolume
+ipywidgets
+laspy[lazrs]
+matplotlib
+numpy
+numpydantic
+pandas
+pandera
+plotly
+pydantic
+rasterio
+seaborn

@@ -1,0 +1,5 @@
+ipykernel
+pytest
+sphinx
+sphinx-rtd-theme
+pre-commit
