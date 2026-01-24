@@ -1,0 +1,5 @@
+-r requirements-base.txt
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+# gpu versions
+jax[cuda]
+numpyro[cuda]
