@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import os
-import subprocess
-import warnings
 
 import numpy as np
 import numpy.typing as npt
-import pdal
 import rasterio
 from shapely.geometry import Point, Polygon
 
@@ -87,6 +83,7 @@ def get_elevation(
     elev : numpy array
         elevation at specified (x, y) coordinates
     """
+    x, y = np.asanyarray(x), np.asanyarray(y)
     with rasterio.open(dem) as src:
         BAND_ONE = 1
         terrain = src.read(BAND_ONE)
@@ -102,7 +99,8 @@ def get_elevation(
         rows, cols = [], []
         for x_val, y_val in zip(x, y):
             row, col = src.index(x_val, y_val)
-            rows.append(row), cols.append(row)
+            rows.append(row)
+            cols.append(row)
     # rows, cols = src.index(*coords)
     rows = np.array(rows)
     cols = np.array(cols)
@@ -331,7 +329,7 @@ def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.nd
 
 def _get_hull_apex_and_base(
     crown_radii: np.ndarray, top_height: float | np.ndarray, crown_ratio: float
-) -> (np.ndarray, np.ndarray):
+) -> tuple[np.ndarray, np.ndarray]:
     """Calculates the (x,y,z) position of the apex and base of a tree crown.
 
     This models a tree crown as an asymmetric hull comprised of
@@ -398,7 +396,7 @@ def _get_circular_plot_boundary(
     y: np.ndarray,
     radius: np.ndarray,
     dem: str | os.PathLike | None = None,
-) -> (np.ndarray, np.ndarray, np.ndarray):
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Returns coordinates of 32 points along the circumference of a circular plot.
 
     If a digital elevation model readable by rasterio is also provided, the
@@ -430,16 +428,16 @@ def _get_circular_plot_boundary(
 
 
 def _make_crown_hull(
-    stem_base: npt.NDArray((3,), float),
+    stem_base: npt.NDArray[(3,), float],
     top_height: float | np.ndarray,
     crown_ratio: float,
     lean_direction: float,
     lean_severity: float,
-    crown_radii: npt.NDArray((4,), float),
-    crown_edge_heights: npt.NDArray((4,), float),
-    crown_shapes: npt.NDArray((4, 2), float),
+    crown_radii: npt.NDArray[(4,), float],
+    crown_edge_heights: npt.NDArray[(4,), float],
+    crown_shapes: npt.NDArray[(4, 2), float],
     top_only: bool = False,
-) -> (np.ndarray, np.ndarray, np.ndarray):
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Makes a crown hull.
 
     Parameters
@@ -625,72 +623,3 @@ def _make_crown_hull(
     crown_zs[grid_bottom] = grid_zs[grid_bottom] + translate_z
 
     return crown_xs.flatten(), crown_ys.flatten(), crown_zs.flatten()
-
-
-def poisson_pipeline(
-    infile: str | os.PathLike, outfile: str | os.PathLike, depth: int = 8
-) -> dict:
-    """Makes a dictionary describing PDAL pipeline for generating Poisson surface mesh.
-
-    Parameters
-    -----------
-    infile : str, path to file
-        input file to be converted into a mesh
-    outfile : str, path to file
-        output file for storing Poisson surface mesh
-    depth : int
-        maximum depth of octree used to organize surface points
-
-    Returns:
-    --------
-    pipeline : dict
-        recipe for executing PDAL pipeline
-    """
-    return {
-        "pipeline": [
-            infile,
-            {"type": "filters.normal"},
-            {"type": "filters.poisson", "depth": depth, "density": "true"},
-            {"type": "filters.normal"},
-            {
-                "type": "writers.ply",
-                "filename": outfile,
-                "storage_mode": "default",
-                "faces": "true",
-            },
-        ]
-    }
-
-
-def poisson_mesh(
-    infile: str | os.PathLike, outfile: str | os.PathLike, depth: int = 8
-) -> None:
-    """Generates a Poisson surface mesh from point cloud and output in PLY file format.
-
-    Parameters
-    -----------
-    infile : string, path to file
-        LAS or LAZ format point cloud to read from disk
-    outfile : string, path to file
-        PLY format file to save mesh to disk
-    depth : int
-        Maximum depth of octree used for mesh construction. Increasing this
-        value will provide more detailed mesh and require more computation time
-    """
-    pipeline_json = json.dumps(poisson_pipeline(infile, outfile, depth))
-
-    # validate the pipeline using python extension to PDAL
-    pipeline = pdal.Pipeline(pipeline_json)
-    PDAL = "pdal"
-    CMD_PIPELINE = "pipeline"
-    ARG_STDIN = "--stdin"
-    UTF8 = "utf-8"
-
-    if pipeline.validate():
-        proc = subprocess.run(
-            [PDAL, CMD_PIPELINE, ARG_STDIN],
-            capture_output=True,
-            input=pipeline_json.encode(UTF8),
-        )
-        if proc.returncode != 0:
-            warnings.warn(proc.stderr.decode())

@@ -1,75 +1,51 @@
-import os
-
 import numpy as np
+
 from forest3d.models.dataclass import Tree
-from forest3d.utils.geometry import (_get_hull_apex_and_base,
-                                     _get_treetop_location)
+from forest3d.utils.geometry import _get_hull_apex_and_base, _get_treetop_location
 
 
 def test_stem_x_hull_isolation():
     """Changes in stem_x coordinate alter expected coordinates describing crown."""
 
     x1, y1, z1 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=0,
-        stem_y=0,
-        stem_z=0).crown
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
+    ).crown
 
     x2, y2, z2 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=10,
-        stem_y=0,
-        stem_z=0).crown
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=10, stem_y=0, stem_z=0
+    ).crown
 
     assert not np.allclose(x1, x2)
     assert np.allclose(y1, y2)
     assert np.allclose(z1, z2)
 
+
 def test_stem_y_hull_isolation():
     """Changes in stem_y coordinate alter expected coordinates describing crown."""
 
     x1, y1, z1 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=0,
-        stem_y=0,
-        stem_z=0).crown
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
+    ).crown
 
     x2, y2, z2 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=0,
-        stem_y=10,
-        stem_z=0).crown
-    
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=10, stem_z=0
+    ).crown
+
     assert np.allclose(x1, x2)
     assert not np.allclose(y1, y2)
     assert np.allclose(z1, z2)
+
 
 def test_stem_z_hull_isolation():
     """Changes in stem_z coordinate alter expected coordinates describing crown."""
 
     x1, y1, z1 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=0,
-        stem_y=0,
-        stem_z=0).crown
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
+    ).crown
 
     x2, y2, z2 = Tree(
-        species='Douglas-fir',
-        dbh=7.5,
-        top_height=85,
-        stem_x=0,
-        stem_y=0,
-        stem_z=10).crown
+        species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=10
+    ).crown
 
     assert np.allclose(x1, x2)
     assert np.allclose(y1, y2)
@@ -89,8 +65,9 @@ def test_treetop_stem_x_isolation():
     assert np.allclose(trans1[1], trans2[1])
     assert np.allclose(trans1[2], trans2[2])
 
+
 def test_treetop_stem_y_isolation():
-    """"Changes in treetop_stem_y alter expected coordinates describing crown."""
+    """ "Changes in treetop_stem_y alter expected coordinates describing crown."""
 
     stem1 = (0, 0, 0)
     stem2 = (0, 10, 0)
@@ -101,6 +78,7 @@ def test_treetop_stem_y_isolation():
     assert np.allclose(trans1[0], trans2[0])
     assert not np.allclose(trans1[1], trans2[1])
     assert np.allclose(trans1[2], trans2[2])
+
 
 def test_treetop_stem_z_isolation():
     """Changes in treetop_stem_z alter expected coordinates describing crown."""
@@ -115,21 +93,24 @@ def test_treetop_stem_z_isolation():
     assert np.allclose(trans1[1], trans2[1])
     assert not np.allclose(trans1[2], trans2[2])
 
-def test_hull_apex_and_base_consisten():
+
+def test_hull_apex_and_base_consistent():
     """make_hull() has same apex and base as _get_hull_apex_and_base()."""
 
     tree = Tree(
-        species= 'Douglas-fir',
-        dbh= 8.5,
-        top_height= 80, 
-        stem_x= 0,
-        stem_y= 0,
-        stem_z= 0,
-        crown_radii= (10, 10, 10, 10),
-        crown_ratio= 0.5,
+        species="Douglas-fir",
+        dbh=8.5,
+        top_height=80,
+        stem_x=0,
+        stem_y=0,
+        stem_z=0,
+        crown_radii=(10, 10, 10, 10),
+        crown_ratio=0.5,
     )
 
-    apex1, base1 = _get_hull_apex_and_base(tree.crown_radii, tree.top_height, tree.crown_ratio)
+    apex1, base1 = _get_hull_apex_and_base(
+        tree.crown_radii, tree.top_height, tree.crown_ratio
+    )
     crown_x, crown_y, crown_z = tree.crown
 
     apex2 = (tree.stem_x, tree.stem_y, crown_z.max())
