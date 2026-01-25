@@ -1,13 +1,13 @@
 geopandas
-ipyvolume
 ipywidgets
+jupyter
 laspy[lazrs]
+k3d
 matplotlib
 numpy
 numpydantic
 pandas
 pandera
-plotly
 pydantic
 rasterio
 seaborn

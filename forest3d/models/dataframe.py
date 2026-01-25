@@ -5,7 +5,7 @@ from typing import Any
 
 import geopandas as gpd
 import pandas as pd
-import pandera as pa
+import pandera.pandas as pa
 
 
 class TreeListDataFrameModel(pa.DataFrameModel):
@@ -18,7 +18,7 @@ class TreeListDataFrameModel(pa.DataFrameModel):
     top_height: float = pa.Field(gt=0)
     crown_ratio: float = pa.Field(default=0.65, ge=0, le=1.0)
 
-    class Config(pa.api.pandas.model_config.BaseConfig):
+    class Config:
         """Config for TreeListDataFrameModel."""
 
         name = "TreeListDataFrameModel"
@@ -42,7 +42,7 @@ class TreeListGeoDataFrameModel(TreeListDataFrameModel):
 
     geometry: gpd.array.GeometryDtype
 
-    class Config(pa.api.pandas.model_config.BaseConfig):
+    class Config:
         """Config for TreeListGeoDataFrameModel."""
 
         name = "TreeListGeoDataFrameModel"
@@ -51,7 +51,7 @@ class TreeListGeoDataFrameModel(TreeListDataFrameModel):
         strict = False
 
     @classmethod
-    def from_file(cls, path_to_file: str | os.pathLike) -> TreeListGeoDataFrameModel:
+    def from_file(cls, path_to_file: str | os.PathLike) -> TreeListGeoDataFrameModel:
         """Reads and validates treelist gdf from any file type recognized by GeoPandas."""
         return cls(gpd.read_file(path_to_file))
 
