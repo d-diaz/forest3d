@@ -5,7 +5,6 @@ laspy[lazrs]
 k3d
 matplotlib
 numpy
-numpydantic
 pandas
 pandera
 pydantic
