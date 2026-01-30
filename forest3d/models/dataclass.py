@@ -1,31 +1,9 @@
 from __future__ import annotations
 
 import numpy as np
-import numpy.typing as npt
-from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from forest3d.utils.geometry import _make_crown_hull
-
-
-class Coordinate3D(BaseModel):
-    """A single 3D coordinate."""
-
-    x: float
-    y: float
-    z: float
-
-    def to_numpy(self):
-        """Returns coordinate as np.array with shape (3,)."""
-        return np.array(self.x, self.y, self.z)
-
-
-class CoordinateSet3D(BaseModel):
-    """A set of 3D coordinates."""
-
-    xs: NDArray[Shape["*"], float]  # noqa: F722
-    ys: NDArray[Shape["*"], float]  # noqa: F722
-    zs: NDArray[Shape["*"], float]  # noqa: F722
 
 
 class Tree(BaseModel):
@@ -85,11 +63,14 @@ class Tree(BaseModel):
     lean_severity: float = Field(default=0, ge=0, le=90)
     crown_ratio: float | int = Field(default=0.65, ge=0, le=1.0)
     crown_radius: float | int | None = None
-    crown_radii: NDArray[Shape["4"], float | int] | None = None  # noqa: UP037
-    crown_edge_heights: NDArray[Shape["4"], float] = np.array(  # noqa: UP037
+    crown_radii: np.ndarray | tuple[float, float, float, float] | None = None
+    crown_edge_heights: np.ndarray | tuple[float, float, float, float] = np.array(
         (0.3, 0.3, 0.3, 0.3)
     )
-    crown_shapes: NDArray[Shape["2, 4"], float] = np.full((2, 4), fill_value=2.0)  # noqa: UP037
+    crown_shapes: (
+        np.ndarray
+        | tuple[tuple[float, float, float, float], tuple[float, float, float, float]]
+    ) = np.full((2, 4), fill_value=2.0)
 
     @model_validator(mode="before")
     def crown_radii_from_radius(self):
@@ -114,15 +95,13 @@ class Tree(BaseModel):
         return self
 
     @property
-    def stem_base(self) -> NDArray[Shape["3"], float]:  # noqa: UP037,F722
+    def stem_base(self) -> np.ndarray:
         """Coordinates for the base of the stem."""
         return np.array((self.stem_x, self.stem_y, self.stem_z))
 
     stem_base = computed_field(stem_base)
 
-    def crown(
-        self, num_theta: int = 32, num_z: int = 50
-    ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
+    def crown(self, num_theta: int = 32, num_z: int = 50) -> np.ndarray:
         """Generates a crown hull for this tree.
 
         Args:
@@ -132,8 +111,7 @@ class Tree(BaseModel):
             number of points along the height of the crown
 
         Returns:
-        tuple[npt.NDArray, npt.NDArray, npt.NDArray]
-            x, y, z coordinates of the crown hull
+        np.ndarray of points array with shape (num_z * num_theta, 3)
         """
         return _make_crown_hull(
             stem_base=self.stem_base,

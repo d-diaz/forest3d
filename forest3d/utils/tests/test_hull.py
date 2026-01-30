@@ -7,49 +7,49 @@ from forest3d.utils.geometry import _get_hull_apex_and_base, _get_treetop_locati
 def test_stem_x_hull_isolation():
     """Changes in stem_x coordinate alter expected coordinates describing crown."""
 
-    x1, y1, z1 = Tree(
+    p1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
     ).crown()
 
-    x2, y2, z2 = Tree(
+    p2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=10, stem_y=0, stem_z=0
     ).crown()
 
-    assert not np.allclose(x1, x2)
-    assert np.allclose(y1, y2)
-    assert np.allclose(z1, z2)
+    assert not np.allclose(p1[:, 0], p2[:, 0])
+    assert np.allclose(p1[:, 1], p2[:, 1])
+    assert np.allclose(p1[:, 2], p2[:, 2])
 
 
 def test_stem_y_hull_isolation():
     """Changes in stem_y coordinate alter expected coordinates describing crown."""
 
-    x1, y1, z1 = Tree(
+    p1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
     ).crown()
 
-    x2, y2, z2 = Tree(
+    p2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=10, stem_z=0
     ).crown()
 
-    assert np.allclose(x1, x2)
-    assert not np.allclose(y1, y2)
-    assert np.allclose(z1, z2)
+    assert np.allclose(p1[:, 0], p2[:, 0])
+    assert not np.allclose(p1[:, 1], p2[:, 1])
+    assert np.allclose(p1[:, 2], p2[:, 2])
 
 
 def test_stem_z_hull_isolation():
     """Changes in stem_z coordinate alter expected coordinates describing crown."""
 
-    x1, y1, z1 = Tree(
+    p1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
     ).crown()
 
-    x2, y2, z2 = Tree(
+    p2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=10
     ).crown()
 
-    assert np.allclose(x1, x2)
-    assert np.allclose(y1, y2)
-    assert not np.allclose(z1, z2)
+    assert np.allclose(p1[:, 0], p2[:, 0])
+    assert np.allclose(p1[:, 1], p2[:, 1])
+    assert not np.allclose(p1[:, 2], p2[:, 2])
 
 
 def test_treetop_stem_x_isolation():
@@ -111,10 +111,10 @@ def test_hull_apex_and_base_consistent():
     apex1, base1 = _get_hull_apex_and_base(
         tree.crown_radii, tree.top_height, tree.crown_ratio
     )
-    crown_x, crown_y, crown_z = tree.crown()
+    points = tree.crown()
 
-    apex2 = (tree.stem_x, tree.stem_y, crown_z.max())
-    base2 = (tree.stem_x, tree.stem_y, crown_z.min())
+    apex2 = (tree.stem_x, tree.stem_y, points[:, 2].max())
+    base2 = (tree.stem_x, tree.stem_y, points[:, 2].min())
 
     assert np.allclose(apex1, apex2)
     assert np.allclose(base1, base2)
@@ -137,12 +137,8 @@ def test_hull_num_theta_and_num_z():
         crown_radii=(10, 10, 10, 10),
         crown_ratio=0.5,
     )
-    x1, y1, z1 = tree.crown(num_theta=NUM_THETA_1, num_z=NUM_Z_1)
-    x2, y2, z2 = tree.crown(num_theta=NUM_THETA_2, num_z=NUM_Z_2)
+    p1 = tree.crown(num_theta=NUM_THETA_1, num_z=NUM_Z_1)
+    p2 = tree.crown(num_theta=NUM_THETA_2, num_z=NUM_Z_2)
 
-    assert x1.shape == (NUM_Z_1 * NUM_THETA_1,)
-    assert y1.shape == (NUM_Z_1 * NUM_THETA_1,)
-    assert z1.shape == (NUM_Z_1 * NUM_THETA_1,)
-    assert x2.shape == (NUM_Z_2 * NUM_THETA_2,)
-    assert y2.shape == (NUM_Z_2 * NUM_THETA_2,)
-    assert z2.shape == (NUM_Z_2 * NUM_THETA_2,)
+    assert p1.shape == (NUM_Z_1 * NUM_THETA_1, 3)
+    assert p2.shape == (NUM_Z_2 * NUM_THETA_2, 3)

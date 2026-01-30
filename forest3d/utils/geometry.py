@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import numpy as np
-import numpy.typing as npt
 import rasterio
 from shapely.geometry import Point, Polygon
 
@@ -428,24 +427,24 @@ def _get_circular_plot_boundary(
 
 
 def _make_crown_hull(
-    stem_base: npt.NDArray[(3,), float],
-    top_height: float | np.ndarray,
+    stem_base: np.ndarray,
+    top_height: float,
     crown_ratio: float,
     lean_direction: float,
     lean_severity: float,
-    crown_radii: npt.NDArray[(4,), float],
-    crown_edge_heights: npt.NDArray[(4,), float],
-    crown_shapes: npt.NDArray[(4, 2), float],
+    crown_radii: np.ndarray,
+    crown_edge_heights: np.ndarray,
+    crown_shapes: np.ndarray,
     num_theta: int = 32,
     num_z: int = 50,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> np.ndarray:
     """Makes a crown hull.
 
     Parameters
     ----------
     stem_base : array with shape(3,)
         (x,y,z) coordinates of stem base
-    top_height : numeric, or array of numeric values
+    top_height : numeric
         vertical height of the tree apex from the base of the stem
     crown_ratio : numeric
         ratio of live crown length to total tree height
@@ -472,6 +471,12 @@ def _make_crown_hull(
         number of points along the circumference of the crown
     num_z : int, optional
         number of points along the height of the crown
+
+    Returns
+    -------
+    points : numpy.ndarray, shape (num_z * num_theta, 3)
+        3D points on the crown hull surface. Point order matches the previous
+        `(x, y, z)` flattening order so downstream mesh topology remains stable.
     """
     translate_x, translate_y, translate_z = _get_treetop_location(
         stem_base, top_height, lean_direction, lean_severity
@@ -617,4 +622,4 @@ def _make_crown_hull(
     crown_ys[grid_bottom] = grid_ys[grid_bottom] + translate_y
     crown_zs[grid_bottom] = grid_zs[grid_bottom] + translate_z
 
-    return crown_xs.flatten(), crown_ys.flatten(), crown_zs.flatten()
+    return np.column_stack((crown_xs.ravel(), crown_ys.ravel(), crown_zs.ravel()))

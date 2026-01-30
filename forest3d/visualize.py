@@ -46,7 +46,7 @@ def _make_tree_all_params(
     shape_bottom_north,
     shape_bottom_west,
     shape_bottom_south,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> np.ndarray:
     """Creates a tree and returns its crown as a hull.
 
     Exposes all parameters used as individual arguments.
@@ -55,11 +55,10 @@ def _make_tree_all_params(
     script in this package. The parameters are the same as involved in
     instantiating a Tree object.
 
-    Returns:
-    --------
-    x, y, z : numpy arrays
-        the x, y, and z coordinates of points that occur along the edge of the
-        tree crown.
+    Returns
+    -------
+    points : numpy.ndarray, shape (num_z * num_theta, 3)
+        3D points on the crown hull surface.
     """
     crown_radii = np.array(
         (crown_radius_east, crown_radius_north, crown_radius_west, crown_radius_south)
@@ -294,7 +293,7 @@ def plot_single_tree_interactive(
         shape_bottom_west,
         shape_bottom_south,
     ):
-        x, y, z = _make_tree_all_params(
+        points = _make_tree_all_params(
             species=species,
             dbh=dbh,
             top_height=top_height,
@@ -322,7 +321,7 @@ def plot_single_tree_interactive(
             shape_bottom_south=shape_bottom_south,
         )
 
-        positions = np.column_stack([x, y, z]).astype(np.float32)
+        positions = points.astype(np.float32)
 
         with plot.hold_sync():
             pts.positions = positions
@@ -428,15 +427,9 @@ def plot_tree_list(
             crown_radius=row.get("crown_radius", None),
             lean_direction=float(row.get("lean_direction", 0.0)),
             lean_severity=float(row.get("lean_severity", 0.0)),
-            num_theta=n_cols,
-            num_z=n_rows,
         )
-        x, y, z = tree.crown(num_theta=n_cols, num_z=n_rows)
-        X = x.reshape((n_rows, n_cols))
-        Y = y.reshape((n_rows, n_cols))
-        Z = z.reshape((n_rows, n_cols))
-
-        by_species[row["species"]].append((X, Y, Z))
+        points = tree.crown(num_theta=n_cols, num_z=n_rows)
+        by_species[row["species"]].append(points)
 
     # Build one k3d.mesh per species (batched vertices + batched indices)
     for s, crowns in by_species.items():
@@ -444,12 +437,8 @@ def plot_tree_list(
             continue
 
         # decide wrap once using the first crown in this species
-        X0, Y0, Z0 = crowns[0]
-        seam_is_duplicate = (
-            np.allclose(X0[:, 0], X0[:, -1])
-            and np.allclose(Y0[:, 0], Y0[:, -1])
-            and np.allclose(Z0[:, 0], Z0[:, -1])
-        )
+        P0 = crowns[0].reshape((n_rows, n_cols, 3))
+        seam_is_duplicate = np.allclose(P0[:, 0, :], P0[:, -1, :])
         wrap_cols = (not seam_is_duplicate) and wrap_cols_default
         base_faces = _grid_triangles(n_rows, n_cols, wrap_cols=wrap_cols)
 
@@ -457,10 +446,8 @@ def plot_tree_list(
         faces_list = []
         offset = 0
 
-        for X, Y, Z in crowns:
-            verts = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()]).astype(
-                np.float32
-            )
+        for points in crowns:
+            verts = points.astype(np.float32)
             verts_list.append(verts)
 
             faces_list.append(base_faces + offset)
@@ -503,19 +490,15 @@ def random_forest(n_trees: int) -> k3d.Plot:
     crowns_colors = []
 
     for _ in range(n_trees):
-        x, y, z = _make_random_tree_crown()
-        X = x.reshape((n_rows, n_cols))
-        Y = y.reshape((n_rows, n_cols))
-        Z = z.reshape((n_rows, n_cols))
+        points = _make_random_tree_crown()
+        x_min = min(x_min, float(points[:, 0].min()))
+        x_max = max(x_max, float(points[:, 0].max()))
+        y_min = min(y_min, float(points[:, 1].min()))
+        y_max = max(y_max, float(points[:, 1].max()))
+        z_min = min(z_min, float(points[:, 2].min()))
+        z_max = max(z_max, float(points[:, 2].max()))
 
-        x_min = min(x_min, float(X.min()))
-        x_max = max(x_max, float(X.max()))
-        y_min = min(y_min, float(Y.min()))
-        y_max = max(y_max, float(Y.max()))
-        z_min = min(z_min, float(Z.min()))
-        z_max = max(z_max, float(Z.max()))
-
-        vertices = np.column_stack([X.ravel(), Y.ravel(), Z.ravel()]).astype(np.float32)
+        vertices = points.astype(np.float32)
         crowns_vertices.append(vertices)
 
         color = _rgb_to_k3d_int(palette[np.random.randint(0, len(palette))])
@@ -579,7 +562,7 @@ def _grid_triangles(n_rows: int, n_cols: int, wrap_cols: bool) -> np.ndarray:
     return np.vstack([t1, t2]).astype(np.uint32)
 
 
-def _make_random_tree_crown() -> tuple[np.array, np.array, np.array]:
+def _make_random_tree_crown() -> np.ndarray:
     """Generates a random tree crown."""
     dbh = np.random.rand() * 40
     top_height = np.random.randint(low=50, high=200)
