@@ -436,6 +436,8 @@ def _make_crown_hull(
     crown_radii: npt.NDArray[(4,), float],
     crown_edge_heights: npt.NDArray[(4,), float],
     crown_shapes: npt.NDArray[(4, 2), float],
+    num_theta: int = 32,
+    num_z: int = 50,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Makes a crown hull.
 
@@ -466,6 +468,10 @@ def _make_crown_hull(
     crown_shapes : array with shape (4,2)
         shape coefficients describing curvature of crown profiles
         in each direction (E, N, W, S) for top and bottom of crown
+    num_theta : int, optional
+        number of points along the circumference of the crown
+    num_z : int, optional
+        number of points along the height of the crown
     """
     translate_x, translate_y, translate_z = _get_treetop_location(
         stem_base, top_height, lean_direction, lean_severity
@@ -481,8 +487,8 @@ def _make_crown_hull(
     base_x, base_y, base_z = hull_base
 
     # places where we'll calculate crown surface
-    thetas = np.linspace(0, 2 * np.pi, 32)  # angles
-    zs = np.linspace(base_z, apex_z, 50)  # heights
+    thetas = np.linspace(0, 2 * np.pi, num_theta)  # angles
+    zs = np.linspace(base_z, apex_z, num_z)  # heights
     grid_thetas, grid_zs = np.meshgrid(thetas, zs)
 
     # calculate height difference between apex and peripheral points
