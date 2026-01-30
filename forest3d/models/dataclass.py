@@ -120,18 +120,30 @@ class Tree(BaseModel):
 
     stem_base = computed_field(stem_base)
 
-    @property
-    def crown(self) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
-        """Generate a hull for this tree."""
-        return _make_crown_hull(
-            self.stem_base,
-            self.top_height,
-            self.crown_ratio,
-            self.lean_direction,
-            self.lean_severity,
-            self.crown_radii,
-            self.crown_edge_heights,
-            self.crown_shapes,
-        )
+    def crown(
+        self, num_theta: int = 32, num_z: int = 50
+    ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
+        """Generates a crown hull for this tree.
 
-    crown = computed_field(crown)
+        Args:
+        num_theta : int, optional
+            number of points along the circumference of the crown
+        num_z : int, optional
+            number of points along the height of the crown
+
+        Returns:
+        tuple[npt.NDArray, npt.NDArray, npt.NDArray]
+            x, y, z coordinates of the crown hull
+        """
+        return _make_crown_hull(
+            stem_base=self.stem_base,
+            top_height=self.top_height,
+            crown_ratio=self.crown_ratio,
+            lean_direction=self.lean_direction,
+            lean_severity=self.lean_severity,
+            crown_radii=self.crown_radii,
+            crown_edge_heights=self.crown_edge_heights,
+            crown_shapes=self.crown_shapes,
+            num_theta=num_theta,
+            num_z=num_z,
+        )

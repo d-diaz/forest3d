@@ -9,11 +9,11 @@ def test_stem_x_hull_isolation():
 
     x1, y1, z1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
-    ).crown
+    ).crown()
 
     x2, y2, z2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=10, stem_y=0, stem_z=0
-    ).crown
+    ).crown()
 
     assert not np.allclose(x1, x2)
     assert np.allclose(y1, y2)
@@ -25,11 +25,11 @@ def test_stem_y_hull_isolation():
 
     x1, y1, z1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
-    ).crown
+    ).crown()
 
     x2, y2, z2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=10, stem_z=0
-    ).crown
+    ).crown()
 
     assert np.allclose(x1, x2)
     assert not np.allclose(y1, y2)
@@ -41,11 +41,11 @@ def test_stem_z_hull_isolation():
 
     x1, y1, z1 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=0
-    ).crown
+    ).crown()
 
     x2, y2, z2 = Tree(
         species="Douglas-fir", dbh=7.5, top_height=85, stem_x=0, stem_y=0, stem_z=10
-    ).crown
+    ).crown()
 
     assert np.allclose(x1, x2)
     assert np.allclose(y1, y2)
@@ -111,10 +111,38 @@ def test_hull_apex_and_base_consistent():
     apex1, base1 = _get_hull_apex_and_base(
         tree.crown_radii, tree.top_height, tree.crown_ratio
     )
-    crown_x, crown_y, crown_z = tree.crown
+    crown_x, crown_y, crown_z = tree.crown()
 
     apex2 = (tree.stem_x, tree.stem_y, crown_z.max())
     base2 = (tree.stem_x, tree.stem_y, crown_z.min())
 
     assert np.allclose(apex1, apex2)
     assert np.allclose(base1, base2)
+
+
+def test_hull_num_theta_and_num_z():
+    """providing different num_theta and num_z values alters shape of hull."""
+    NUM_THETA_1 = 32
+    NUM_THETA_2 = 64
+    NUM_Z_1 = 50
+    NUM_Z_2 = 100
+
+    tree = Tree(
+        species="Douglas-fir",
+        dbh=8.5,
+        top_height=80,
+        stem_x=0,
+        stem_y=0,
+        stem_z=0,
+        crown_radii=(10, 10, 10, 10),
+        crown_ratio=0.5,
+    )
+    x1, y1, z1 = tree.crown(num_theta=NUM_THETA_1, num_z=NUM_Z_1)
+    x2, y2, z2 = tree.crown(num_theta=NUM_THETA_2, num_z=NUM_Z_2)
+
+    assert x1.shape == (NUM_Z_1 * NUM_THETA_1,)
+    assert y1.shape == (NUM_Z_1 * NUM_THETA_1,)
+    assert z1.shape == (NUM_Z_1 * NUM_THETA_1,)
+    assert x2.shape == (NUM_Z_2 * NUM_THETA_2,)
+    assert y2.shape == (NUM_Z_2 * NUM_THETA_2,)
+    assert z2.shape == (NUM_Z_2 * NUM_THETA_2,)

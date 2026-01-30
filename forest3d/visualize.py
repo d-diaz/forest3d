@@ -101,7 +101,7 @@ def _make_tree_all_params(
         crown_shapes=crown_shapes,
     )
 
-    return tree.crown
+    return tree.crown()
 
 
 def build_tree_controls() -> tuple[Accordion, dict[str, Any]]:
@@ -428,8 +428,10 @@ def plot_tree_list(
             crown_radius=row.get("crown_radius", None),
             lean_direction=float(row.get("lean_direction", 0.0)),
             lean_severity=float(row.get("lean_severity", 0.0)),
+            num_theta=n_cols,
+            num_z=n_rows,
         )
-        x, y, z = tree.crown
+        x, y, z = tree.crown(num_theta=n_cols, num_z=n_rows)
         X = x.reshape((n_rows, n_cols))
         Y = y.reshape((n_rows, n_cols))
         Z = z.reshape((n_rows, n_cols))
@@ -605,4 +607,4 @@ def _make_random_tree_crown() -> tuple[np.array, np.array, np.array]:
         lean_direction=lean_direction,
         lean_severity=lean_severity,
     )
-    return tree.crown
+    return tree.crown()
