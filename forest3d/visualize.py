@@ -46,7 +46,6 @@ def _make_tree_all_params(
     shape_bottom_north,
     shape_bottom_west,
     shape_bottom_south,
-    top_only=False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Creates a tree and returns its crown as a hull.
 
@@ -100,7 +99,6 @@ def _make_tree_all_params(
         crown_radii=crown_radii,
         crown_edge_heights=crown_edge_heights,
         crown_shapes=crown_shapes,
-        top_only=top_only,
     )
 
     return tree.crown

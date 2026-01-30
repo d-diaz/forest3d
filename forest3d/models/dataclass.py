@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.typing as npt
-from forest3d.utils.geometry import _make_crown_hull
 from numpydantic import NDArray, Shape
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+
+from forest3d.utils.geometry import _make_crown_hull
 
 
 class Coordinate3D(BaseModel):
@@ -70,9 +71,6 @@ class Tree(BaseModel):
         Coef values of 1.0 produce a cone, values < 1 produce concave
         shapes, and values > 1 will produce convex shapes, with coef == 2.0
         producing an ellipse.
-    top_only : bool
-        if True, will only return the top portion of the crown, i.e., the
-        points above the maximum crown width
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -92,7 +90,6 @@ class Tree(BaseModel):
         (0.3, 0.3, 0.3, 0.3)
     )
     crown_shapes: NDArray[Shape["2, 4"], float] = np.full((2, 4), fill_value=2.0)  # noqa: UP037
-    top_only: bool = False
 
     @model_validator(mode="before")
     def crown_radii_from_radius(self):
@@ -116,13 +113,13 @@ class Tree(BaseModel):
                 self["crown_ratio"] /= 100.0
         return self
 
-    @computed_field
     @property
-    def stem_base(self) -> NDArray[Shape["3, 0"], float]:  # noqa: UP037
+    def stem_base(self) -> NDArray[Shape["3"], float]:  # noqa: UP037,F722
         """Coordinates for the base of the stem."""
         return np.array((self.stem_x, self.stem_y, self.stem_z))
 
-    @computed_field
+    stem_base = computed_field(stem_base)
+
     @property
     def crown(self) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
         """Generate a hull for this tree."""
@@ -135,5 +132,6 @@ class Tree(BaseModel):
             self.crown_radii,
             self.crown_edge_heights,
             self.crown_shapes,
-            self.top_only,
         )
+
+    crown = computed_field(crown)

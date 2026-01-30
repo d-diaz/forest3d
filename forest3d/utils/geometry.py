@@ -436,7 +436,6 @@ def _make_crown_hull(
     crown_radii: npt.NDArray[(4,), float],
     crown_edge_heights: npt.NDArray[(4,), float],
     crown_shapes: npt.NDArray[(4, 2), float],
-    top_only: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Makes a crown hull.
 
@@ -467,9 +466,6 @@ def _make_crown_hull(
     crown_shapes : array with shape (4,2)
         shape coefficients describing curvature of crown profiles
         in each direction (E, N, W, S) for top and bottom of crown
-    top_only : bool
-        if True, will return only top portion of the crown, i.e., the points
-        above the maximum crown width
     """
     translate_x, translate_y, translate_z = _get_treetop_location(
         stem_base, top_height, lean_direction, lean_severity
@@ -559,13 +555,6 @@ def _make_crown_hull(
     crown_xs[grid_top] = grid_xs[grid_top] + translate_x
     crown_ys[grid_top] = grid_ys[grid_top] + translate_y
     crown_zs[grid_top] = grid_zs[grid_top] + translate_z
-
-    if top_only:
-        return (
-            crown_xs[grid_top].flatten(),
-            crown_ys[grid_top].flatten(),
-            crown_zs[grid_top].flatten(),
-        )
 
     # generate the full crown
     # calculate the angle between peripheral points and base axis
