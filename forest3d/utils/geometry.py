@@ -4,9 +4,58 @@ from __future__ import annotations
 
 import os
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import rasterio
+from jax import Array
+from jax.typing import ArrayLike
 from shapely.geometry import Point, Polygon
+
+from forest3d.models.hull_params import TreeHullParams
+
+
+def _make_crown_hull_from_params(
+    params: TreeHullParams, *, num_theta: int = 32, num_z: int = 50
+) -> Array:
+    """Convenience wrapper around `_make_crown_hull` that takes a params container."""
+    return _make_crown_hull(
+        stem_base=jnp.asarray(params.stem_base),
+        top_height=jnp.asarray(params.top_height),
+        crown_ratio=jnp.asarray(params.crown_ratio),
+        lean_direction=jnp.asarray(params.lean_direction),
+        lean_severity=jnp.asarray(params.lean_severity),
+        crown_radii=jnp.asarray(params.crown_radii),
+        crown_edge_heights=jnp.asarray(params.crown_edge_heights),
+        crown_shapes=jnp.asarray(params.crown_shapes),
+        num_theta=num_theta,
+        num_z=num_z,
+    )
+
+
+def _make_crown_hull_batched(
+    params: TreeHullParams, *, num_theta: int = 32, num_z: int = 50
+) -> Array:
+    """Vectorized crown hull over a batch of trees.
+
+    Parameters
+    ----------
+    params : TreeHullParams
+        A params container whose fields are stacked with a leading batch dimension `B`.
+    num_theta, num_z : int
+        Crown sampling resolution. For best performance under `jit`, treat these as
+        static configuration (compile once per resolution).
+
+    Returns
+    -------
+    points : jax.Array, shape (B, num_z * num_theta, 3)
+        Batched crown hull points.
+    """
+
+    def _single(p: TreeHullParams) -> Array:
+        return _make_crown_hull_from_params(p, num_theta=num_theta, num_z=num_z)
+
+    return jax.vmap(_single)(params)
 
 
 def _arrays_equal_shape(*args: np.ndarray, raise_exc: bool = True) -> bool:
@@ -117,11 +166,11 @@ def get_elevation(
 
 
 def _get_treetop_location(
-    stem_base: np.ndarray,
-    top_height: float | np.ndarray,
-    lean_direction: float | np.ndarray | None = None,
-    lean_severity: float | np.ndarray | None = None,
-) -> np.ndarray:
+    stem_base: ArrayLike,
+    top_height: ArrayLike,
+    lean_direction: ArrayLike | None = None,
+    lean_severity: ArrayLike | None = None,
+) -> Array:
     """Calculates 3D coordinates for the top of a tree.
 
     Allows specification of direction and severity of leaning. This location represents
@@ -145,54 +194,34 @@ def _get_treetop_location(
     top_translate_x, top_translate_y, top_translate_z : three values or arrays
         Coodrinates that define the translation of the tree top from (0,0,0)
     """
-    stem_base = np.asanyarray(stem_base)
-    top_height = np.asanyarray(top_height)
+    stem_base = jnp.asarray(stem_base)
+    top_height = jnp.asarray(top_height)
     stem_x, stem_y, stem_z = stem_base
-    stem_x = np.asanyarray(stem_x)
-    stem_y = np.asanyarray(stem_y)
-    stem_z = np.asanyarray(stem_z)
-
-    if np.any(top_height < 0):
-        message = "height must be >= 0."
-        raise ValueError(message)
 
     if lean_direction is None:
-        lean_direction = np.zeros(stem_x.shape)
-    else:
-        lean_direction = np.asanyarray(lean_direction)
+        lean_direction = jnp.zeros_like(stem_x)
+    lean_direction = jnp.asarray(lean_direction)
 
     if lean_severity is None:
-        lean_severity = np.zeros(stem_x.shape)
-    else:
-        lean_severity = np.asanyarray(lean_severity)
+        lean_severity = jnp.zeros_like(stem_x)
+    lean_severity = jnp.asarray(lean_severity)
 
-    if np.any(lean_severity >= 90):
-        message = "lean_severity must be < 90 degrees from vertical."
-        raise ValueError(message)
+    theta_lean = jnp.deg2rad(lean_direction)
+    phi_lean = jnp.deg2rad(lean_severity)
 
-    _arrays_equal_shape(
-        stem_x, stem_y, stem_z, top_height, lean_severity, lean_direction
-    )
-
-    # convert direction of lean to radians
-    theta_lean = np.deg2rad(lean_direction)
-
-    # convert severity of lean to radians, and from horizontal
-    phi_lean = np.deg2rad(lean_severity)
-
-    top_translate_x = stem_x + top_height * np.tan(phi_lean) * np.cos(theta_lean)
-    top_translate_y = stem_y + top_height * np.tan(phi_lean) * np.sin(theta_lean)
+    top_translate_x = stem_x + top_height * jnp.tan(phi_lean) * jnp.cos(theta_lean)
+    top_translate_y = stem_y + top_height * jnp.tan(phi_lean) * jnp.sin(theta_lean)
     top_translate_z = stem_z
 
-    return np.array((top_translate_x, top_translate_y, top_translate_z))
+    return jnp.array((top_translate_x, top_translate_y, top_translate_z))
 
 
 def _get_peripheral_points(
-    crown_radii: np.ndarray,
-    crown_edge_heights: np.ndarray,
-    top_height: float | np.ndarray,
-    crown_ratio: float | np.ndarray,
-) -> np.ndarray:
+    crown_radii: ArrayLike,
+    crown_edge_heights: ArrayLike,
+    top_height: ArrayLike,
+    crown_ratio: ArrayLike,
+) -> Array:
     """Calculates the x,y,z coordinates of the points of maximum crown width.
 
     One point for E, N, W, and S directions around a tree.
@@ -229,30 +258,30 @@ def _get_peripheral_points(
         crown_edge_heights
     )
 
-    east_point = np.array(
+    east_point = jnp.array(
         (crown_radius_east, 0, crown_base_height + crown_edgeht_east * crown_length),
         dtype=float,
     )
 
-    north_point = np.array(
+    north_point = jnp.array(
         (0, crown_radius_north, crown_base_height + crown_edgeht_north * crown_length),
         dtype=float,
     )
 
-    west_point = np.array(
+    west_point = jnp.array(
         (-crown_radius_west, 0, crown_base_height + crown_edgeht_west * crown_length),
         dtype=float,
     )
 
-    south_point = np.array(
+    south_point = jnp.array(
         (0, -crown_radius_south, crown_base_height + crown_edgeht_south * crown_length),
         dtype=float,
     )
 
-    return np.stack((east_point, north_point, west_point, south_point))
+    return jnp.stack((east_point, north_point, west_point, south_point))
 
 
-def _get_hull_center_xy(crown_radii: np.ndarray) -> np.ndarray:
+def _get_hull_center_xy(crown_radii: ArrayLike) -> Array:
     """Calculates x,y coordinates of center of crown projection.
 
     The center of the crown projection is determined as the midpoint between
@@ -269,11 +298,11 @@ def _get_hull_center_xy(crown_radii: np.ndarray) -> np.ndarray:
     center_xy : array with shape (2,)
         x,y coordinates of the center of the crown hull
     """
-    crown_radii = np.asanyarray(crown_radii)
+    crown_radii = jnp.asarray(crown_radii)
     crown_radii_eastwest = crown_radii[0::2]
     crown_radii_northsouth = crown_radii[1::2]
-    center_xy = np.array(
-        (np.diff(crown_radii_eastwest / 2), np.diff(crown_radii_northsouth) / 2)
+    center_xy = jnp.array(
+        (jnp.diff(crown_radii_eastwest / 2), jnp.diff(crown_radii_northsouth) / 2)
     )
     return center_xy[:, 0]
 
@@ -307,23 +336,26 @@ def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.nd
     idx : array with shape (2, 2)
         eccentricity-index values for the top (0, ) and bottom of a tree (1, ).
     """
-    center_xy = _get_hull_center_xy(crown_radii)
+    crown_radii_j = jnp.asarray(crown_radii)
+    crown_ratio_j = jnp.asarray(crown_ratio)
+    center_xy = _get_hull_center_xy(crown_radii_j)
     center_x, center_y = center_xy
-    crown_radii_eastwest = crown_radii[0::2]
-    crown_radii_northsouth = crown_radii[1::2]
+    crown_radii_eastwest = crown_radii_j[0::2]
+    crown_radii_northsouth = crown_radii_j[1::2]
 
-    eccen = np.array(
+    eccen = jnp.array(
         (
             center_x / crown_radii_eastwest.mean(),  # x direction
             center_y / crown_radii_northsouth.mean(),  # y direction
         )
     )
-    return np.array(
+    idx = jnp.array(
         (
-            -2 / np.pi * np.arctan(eccen) * crown_ratio,  # top of tree, x and y
-            2 / np.pi * np.arctan(eccen) * crown_ratio,
+            -2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_j,  # top of tree, x and y
+            2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_j,
         )
-    )  # bottom of tree, x and y
+    )
+    return idx
 
 
 def _get_hull_apex_and_base(
@@ -350,39 +382,41 @@ def _get_hull_apex_and_base(
     hull_apex, hull_base : arrays with shape (3,)
         (x,y,z) coordinates for apex and base of hull representing tree crown
     """
-    crown_radii = np.asanyarray(crown_radii)
+    crown_radii_j = jnp.asarray(crown_radii)
+    top_height_j = jnp.asarray(top_height)
+    crown_ratio_j = jnp.asarray(crown_ratio)
 
-    center_xy = _get_hull_center_xy(crown_radii)
-    eccen_idx = _get_hull_eccentricity(crown_radii, crown_ratio)
+    center_xy = _get_hull_center_xy(crown_radii_j)
+    eccen_idx = _get_hull_eccentricity(crown_radii_j, crown_ratio_j)
 
     center_x, center_y = center_xy
-    crown_radii_eastwest = crown_radii[0::2]
-    crown_radii_northsouth = crown_radii[1::2]
+    crown_radii_eastwest = crown_radii_j[0::2]
+    crown_radii_northsouth = crown_radii_j[1::2]
     top_eccen_eastwest, top_eccen_northsouth = eccen_idx[0]
     bottom_eccen_eastwest, bottom_eccen_northsouth = eccen_idx[1]
 
-    hull_apex = np.array(
+    hull_apex = jnp.array(
         (
             center_x
-            + np.diff(crown_radii_eastwest)[0]
+            + jnp.diff(crown_radii_eastwest)[0]
             * top_eccen_eastwest,  # x location of crown apex
             center_x
-            + np.diff(crown_radii_northsouth)[0]
+            + jnp.diff(crown_radii_northsouth)[0]
             * top_eccen_northsouth,  # y location of crown apex
-            top_height,
+            top_height_j,
         ),
         dtype=float,
     )
 
-    hull_base = np.array(
+    hull_base = jnp.array(
         (
             center_x
-            + np.diff(crown_radii_eastwest)[0]
+            + jnp.diff(crown_radii_eastwest)[0]
             * bottom_eccen_eastwest,  # x location of crown base
             center_y
-            + np.diff(crown_radii_northsouth)[0]
+            + jnp.diff(crown_radii_northsouth)[0]
             * bottom_eccen_northsouth,  # y location of crown base
-            top_height * (1 - crown_ratio),
+            top_height_j * (1 - crown_ratio_j),
         ),
         dtype=float,
     )
@@ -437,7 +471,7 @@ def _make_crown_hull(
     crown_shapes: np.ndarray,
     num_theta: int = 32,
     num_z: int = 50,
-) -> np.ndarray:
+) -> Array:
     """Makes a crown hull.
 
     Parameters
@@ -481,51 +515,60 @@ def _make_crown_hull(
     translate_x, translate_y, translate_z = _get_treetop_location(
         stem_base, top_height, lean_direction, lean_severity
     )
+
+    crown_radii_j = jnp.asarray(crown_radii)
+    crown_edge_heights_j = jnp.asarray(crown_edge_heights)
+    crown_shapes_j = jnp.asarray(crown_shapes)
+
     periph_points = _get_peripheral_points(
-        crown_radii, crown_edge_heights, top_height, crown_ratio
+        crown_radii=crown_radii_j,
+        crown_edge_heights=crown_edge_heights_j,
+        top_height=jnp.asarray(top_height),
+        crown_ratio=jnp.asarray(crown_ratio),
     )
     periph_points_xs = periph_points[:, 0]
     periph_points_ys = periph_points[:, 1]
     periph_points_zs = periph_points[:, 2]
+
     hull_apex, hull_base = _get_hull_apex_and_base(crown_radii, top_height, crown_ratio)
     apex_x, apex_y, apex_z = hull_apex
     base_x, base_y, base_z = hull_base
 
     # places where we'll calculate crown surface
-    thetas = np.linspace(0, 2 * np.pi, num_theta)  # angles
-    zs = np.linspace(base_z, apex_z, num_z)  # heights
-    grid_thetas, grid_zs = np.meshgrid(thetas, zs)
+    thetas = jnp.linspace(0, 2 * jnp.pi, num_theta)  # angles
+    zs = jnp.linspace(base_z, apex_z, num_z)  # heights
+    grid_thetas, grid_zs = jnp.meshgrid(thetas, zs)
 
     # calculate height difference between apex and peripheral points
     periph_points_height_from_apex = apex_z - periph_points_zs
 
     # calculate radial (horizontal) distance from apex axis to periph points
-    top_periph_points_radii = np.hypot(
+    top_periph_points_radii = jnp.hypot(
         periph_points_ys - apex_y, periph_points_xs - apex_x
     )
 
     # calculate the angle between peripheral points and apex axis
-    apex_vs_periph_points_thetas = np.arctan2(
+    apex_vs_periph_points_thetas = jnp.arctan2(
         periph_points_ys - apex_y, periph_points_xs - apex_x
     )
 
     # calculate radii along peripheral line (maximum crown widths by angle
     # theta using linear interpolation)
-    apex_periph_line_radii = np.interp(
+    apex_periph_line_radii = jnp.interp(
         grid_thetas,
         apex_vs_periph_points_thetas,
         top_periph_points_radii,
-        period=2 * np.pi,
+        period=2 * jnp.pi,
     )
 
     # convert peripheral line to x,y,z coords
-    periph_line_xs = apex_periph_line_radii * np.cos(grid_thetas) + apex_x
-    periph_line_ys = apex_periph_line_radii * np.sin(grid_thetas) + apex_y
-    periph_line_zs = apex_z - np.interp(
+    periph_line_xs = apex_periph_line_radii * jnp.cos(grid_thetas) + apex_x
+    periph_line_ys = apex_periph_line_radii * jnp.sin(grid_thetas) + apex_y
+    periph_line_zs = apex_z - jnp.interp(
         grid_thetas,
         apex_vs_periph_points_thetas,
         periph_points_height_from_apex,
-        period=2 * np.pi,
+        period=2 * jnp.pi,
     )
 
     # identify those points in the grid that are higher than the periph line
@@ -533,43 +576,28 @@ def _make_crown_hull(
 
     # calculate the shape coefficients at each angle theta (relative to apex)
     # using linear interpolation
-    top_shapes_measured = crown_shapes[0]
-    bottom_shapes_measured = crown_shapes[1]
-    top_shapes_interp = np.interp(
-        grid_thetas[grid_top],
+    top_shapes_measured = crown_shapes_j[0]
+    bottom_shapes_measured = crown_shapes_j[1]
+    top_shapes_interp = jnp.interp(
+        grid_thetas,
         apex_vs_periph_points_thetas,
         top_shapes_measured,
-        period=2 * np.pi,
+        period=2 * jnp.pi,
     )
 
     # calculate crown radius at each height z for top of crown
-    hull_radii = np.empty_like(grid_zs)
-    hull_radii[grid_top] = (
+    top_hull_radii = (
         (
             1
-            - (grid_zs[grid_top] - periph_line_zs[grid_top]) ** top_shapes_interp
-            / (apex_z - periph_line_zs[grid_top]) ** top_shapes_interp
+            - (grid_zs - periph_line_zs) ** top_shapes_interp
+            / (apex_z - periph_line_zs) ** top_shapes_interp
         )
-        * apex_periph_line_radii[grid_top] ** top_shapes_interp
+        * apex_periph_line_radii**top_shapes_interp
     ) ** (1 / top_shapes_interp)
-
-    # calculate cartesian coordinates of crown edge points
-    grid_xs = np.empty_like(grid_zs)
-    grid_ys = np.empty_like(grid_zs)
-    grid_xs[grid_top] = hull_radii[grid_top] * np.cos(grid_thetas[grid_top]) + apex_x
-    grid_ys[grid_top] = hull_radii[grid_top] * np.sin(grid_thetas[grid_top]) + apex_y
-
-    crown_xs = np.empty_like(grid_zs)
-    crown_ys = np.empty_like(grid_zs)
-    crown_zs = np.empty_like(grid_zs)
-
-    crown_xs[grid_top] = grid_xs[grid_top] + translate_x
-    crown_ys[grid_top] = grid_ys[grid_top] + translate_y
-    crown_zs[grid_top] = grid_zs[grid_top] + translate_z
 
     # generate the full crown
     # calculate the angle between peripheral points and base axis
-    base_vs_periph_points_thetas = np.arctan2(
+    base_vs_periph_points_thetas = jnp.arctan2(
         periph_points_ys - base_y, periph_points_xs - base_x
     )
 
@@ -579,47 +607,49 @@ def _make_crown_hull(
 
     # calculate the angles between points on the peripheral line and crown
     # base
-    bottom_periph_line_thetas = np.empty_like(grid_thetas)
-    bottom_periph_line_thetas[grid_bottom] = np.arctan2(
-        periph_line_ys[grid_bottom] - base_y, periph_line_xs[grid_bottom] - base_x
+    bottom_periph_line_thetas = jnp.arctan2(
+        periph_line_ys - base_y, periph_line_xs - base_x
     )
 
     # calculate radial distance between points on the peripheral line and
     # crown base
-    base_periph_line_radii = np.hypot(periph_line_xs - base_x, periph_line_ys - base_y)
+    base_periph_line_radii = jnp.hypot(periph_line_xs - base_x, periph_line_ys - base_y)
 
     # calculate the shape coefficients at each angle theta (relative to
     # crown base) using linear interpolation
-    bottom_shapes_interp = np.interp(
-        bottom_periph_line_thetas[grid_bottom],
+    bottom_shapes_interp = jnp.interp(
+        bottom_periph_line_thetas,
         base_vs_periph_points_thetas,
         bottom_shapes_measured,
-        period=2 * np.pi,
+        period=2 * jnp.pi,
     )
 
     # calculate crown radius at height z
-    hull_radii[grid_bottom] = (
+    bottom_hull_radii = (
         (
             1
-            - (periph_line_zs[grid_bottom] - grid_zs[grid_bottom])
-            ** bottom_shapes_interp
-            / (periph_line_zs[grid_bottom] - base_z) ** bottom_shapes_interp
+            - (periph_line_zs - grid_zs) ** bottom_shapes_interp
+            / (periph_line_zs - base_z) ** bottom_shapes_interp
         )
-        * base_periph_line_radii[grid_bottom] ** bottom_shapes_interp
+        * base_periph_line_radii**bottom_shapes_interp
     ) ** (1 / bottom_shapes_interp)
 
+    hull_radii = jnp.where(grid_bottom, bottom_hull_radii, top_hull_radii)
+
     # calculate cartesian coordinates of crown edge points
-    grid_xs[grid_bottom] = (
-        hull_radii[grid_bottom] * np.cos(bottom_periph_line_thetas[grid_bottom])
-        + base_x
+    grid_xs = jnp.where(
+        grid_top,
+        hull_radii * jnp.cos(grid_thetas) + apex_x,
+        hull_radii * jnp.cos(bottom_periph_line_thetas) + base_x,
     )
-    grid_ys[grid_bottom] = (
-        hull_radii[grid_bottom] * np.sin(bottom_periph_line_thetas[grid_bottom])
-        + base_y
+    grid_ys = jnp.where(
+        grid_top,
+        hull_radii * jnp.sin(grid_thetas) + apex_y,
+        hull_radii * jnp.sin(bottom_periph_line_thetas) + base_y,
     )
 
-    crown_xs[grid_bottom] = grid_xs[grid_bottom] + translate_x
-    crown_ys[grid_bottom] = grid_ys[grid_bottom] + translate_y
-    crown_zs[grid_bottom] = grid_zs[grid_bottom] + translate_z
+    crown_xs = grid_xs + translate_x
+    crown_ys = grid_ys + translate_y
+    crown_zs = grid_zs + translate_z
 
-    return np.column_stack((crown_xs.ravel(), crown_ys.ravel(), crown_zs.ravel()))
+    return jnp.column_stack((crown_xs.ravel(), crown_ys.ravel(), crown_zs.ravel()))
