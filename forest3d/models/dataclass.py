@@ -60,8 +60,12 @@ class Tree(BaseModel):
     stem_y: float
     stem_z: float = Field(default=0)
     lean_direction: float = Field(default=0, ge=0, le=360)
-    lean_severity: float = Field(default=0, ge=0, le=90)
-    crown_ratio: float | int = Field(default=0.65, ge=0, le=1.0)
+    # NOTE: `lean_severity` must be strictly < 90 degrees. The hull generator uses
+    # `tan(phi_lean)`, which overflows at 90° and can produce infs/NaNs in crown points.
+    lean_severity: float = Field(default=0, ge=0, lt=90)
+    # NOTE: `crown_ratio` must be > 0. A zero-length crown degenerates (base==apex)
+    # and can produce division-by-zero in the hull radius equations.
+    crown_ratio: float | int = Field(default=0.65, gt=0, le=1.0)
     crown_radius: float | int | None = None
     crown_radii: np.ndarray | tuple[float, float, float, float] | None = None
     crown_edge_heights: np.ndarray | tuple[float, float, float, float] = np.array(
@@ -92,6 +96,72 @@ class Tree(BaseModel):
         if "crown_ratio" in self:
             if self["crown_ratio"] > 1:
                 self["crown_ratio"] /= 100.0
+        return self
+
+    @model_validator(mode="after")
+    def validate_hull_inputs(self):
+        """Validates numeric constraints required by the crown hull generator.
+
+        These checks exist to prevent known NaN/inf failure modes in
+        `forest3d.utils.geometry._make_crown_hull`, while keeping the hull itself
+        free of eager Python-side validation (important for JAX `jit` workflows).
+        """
+        # Scalar finiteness checks (Pydantic range constraints do not reject NaN).
+        scalar_vals = np.array(
+            [
+                self.dbh,
+                self.top_height,
+                self.stem_x,
+                self.stem_y,
+                self.stem_z,
+                self.lean_direction,
+                self.lean_severity,
+                float(self.crown_ratio),
+            ],
+            dtype=float,
+        )
+        if not np.isfinite(scalar_vals).all():
+            raise ValueError("Tree parameters must be finite (no NaN/inf).")
+
+        # Crown radii: shape (4,), all >= 0, not all zeros.
+        crown_radii = np.asarray(self.crown_radii, dtype=float)
+        if crown_radii.shape != (4,):
+            raise ValueError("crown_radii must have shape (4,) in E,N,W,S order.")
+        if not np.isfinite(crown_radii).all():
+            raise ValueError("crown_radii must be finite.")
+        if (crown_radii < 0).any():
+            raise ValueError("crown_radii must be >= 0.")
+        if not (crown_radii > 0).any():
+            raise ValueError("crown_radii cannot be all zeros.")
+        self.crown_radii = crown_radii
+
+        # Crown edge heights: shape (4,), in [0, 1).
+        # Values of 1.0 can place the peripheral line at the apex, causing
+        # `(apex_z - periph_line_zs)` to be zero in the top-of-crown equation.
+        crown_edge_heights = np.asarray(self.crown_edge_heights, dtype=float)
+        if crown_edge_heights.shape != (4,):
+            raise ValueError(
+                "crown_edge_heights must have shape (4,) in E,N,W,S order."
+            )
+        if not np.isfinite(crown_edge_heights).all():
+            raise ValueError("crown_edge_heights must be finite.")
+        if (crown_edge_heights < 0).any() or (crown_edge_heights >= 1).any():
+            raise ValueError("crown_edge_heights must be in [0, 1).")
+        self.crown_edge_heights = crown_edge_heights
+
+        # Crown shapes: shape (2,4), strictly > 0.
+        # Zero/negative values can lead to invalid exponentiation and `1/shape`.
+        crown_shapes = np.asarray(self.crown_shapes, dtype=float)
+        if crown_shapes.shape != (2, 4):
+            raise ValueError(
+                "crown_shapes must have shape (2,4) for (top,bottom)x(E,N,W,S)."
+            )
+        if not np.isfinite(crown_shapes).all():
+            raise ValueError("crown_shapes must be finite.")
+        if (crown_shapes <= 0).any():
+            raise ValueError("crown_shapes must be > 0.")
+        self.crown_shapes = crown_shapes
+
         return self
 
     @property
