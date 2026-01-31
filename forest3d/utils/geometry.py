@@ -336,12 +336,12 @@ def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.nd
     idx : array with shape (2, 2)
         eccentricity-index values for the top (0, ) and bottom of a tree (1, ).
     """
-    crown_radii_j = jnp.asarray(crown_radii)
-    crown_ratio_j = jnp.asarray(crown_ratio)
-    center_xy = _get_hull_center_xy(crown_radii_j)
+    crown_radii_array = jnp.asarray(crown_radii)
+    crown_ratio_array = jnp.asarray(crown_ratio)
+    center_xy = _get_hull_center_xy(crown_radii_array)
     center_x, center_y = center_xy
-    crown_radii_eastwest = crown_radii_j[0::2]
-    crown_radii_northsouth = crown_radii_j[1::2]
+    crown_radii_eastwest = crown_radii_array[0::2]
+    crown_radii_northsouth = crown_radii_array[1::2]
 
     eccen = jnp.array(
         (
@@ -351,8 +351,8 @@ def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.nd
     )
     idx = jnp.array(
         (
-            -2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_j,  # top of tree, x and y
-            2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_j,
+            -2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_array,  # top of tree, x and y
+            2 / jnp.pi * jnp.arctan(eccen) * crown_ratio_array,
         )
     )
     return idx
@@ -382,16 +382,16 @@ def _get_hull_apex_and_base(
     hull_apex, hull_base : arrays with shape (3,)
         (x,y,z) coordinates for apex and base of hull representing tree crown
     """
-    crown_radii_j = jnp.asarray(crown_radii)
-    top_height_j = jnp.asarray(top_height)
-    crown_ratio_j = jnp.asarray(crown_ratio)
+    crown_radii_array = jnp.asarray(crown_radii)
+    top_height_array = jnp.asarray(top_height)
+    crown_ratio_array = jnp.asarray(crown_ratio)
 
-    center_xy = _get_hull_center_xy(crown_radii_j)
-    eccen_idx = _get_hull_eccentricity(crown_radii_j, crown_ratio_j)
+    center_xy = _get_hull_center_xy(crown_radii_array)
+    eccen_idx = _get_hull_eccentricity(crown_radii_array, crown_ratio_array)
 
     center_x, center_y = center_xy
-    crown_radii_eastwest = crown_radii_j[0::2]
-    crown_radii_northsouth = crown_radii_j[1::2]
+    crown_radii_eastwest = crown_radii_array[0::2]
+    crown_radii_northsouth = crown_radii_array[1::2]
     top_eccen_eastwest, top_eccen_northsouth = eccen_idx[0]
     bottom_eccen_eastwest, bottom_eccen_northsouth = eccen_idx[1]
 
@@ -403,7 +403,7 @@ def _get_hull_apex_and_base(
             center_x
             + jnp.diff(crown_radii_northsouth)[0]
             * top_eccen_northsouth,  # y location of crown apex
-            top_height_j,
+            top_height_array,
         ),
         dtype=float,
     )
@@ -416,7 +416,7 @@ def _get_hull_apex_and_base(
             center_y
             + jnp.diff(crown_radii_northsouth)[0]
             * bottom_eccen_northsouth,  # y location of crown base
-            top_height_j * (1 - crown_ratio_j),
+            top_height_array * (1 - crown_ratio_array),
         ),
         dtype=float,
     )
@@ -474,6 +474,27 @@ def _make_crown_hull(
 ) -> Array:
     """Makes a crown hull.
 
+    Notes on required input constraints
+    ----------------------------------
+    This function is intentionally kept free of eager (Python-side) validation so it
+    can be composed with JAX transforms like `jit`/`vmap`. As a result, **callers are
+    responsible for ensuring inputs satisfy constraints**. Without them, some
+    parameter combinations can yield NaNs/infs due to division-by-zero or invalid
+    exponentiation.
+
+    In practice, we enforce these constraints at API boundaries (e.g., the `Tree`
+    model in `forest3d/models/dataclass.py`) and later via JIT-compatible checks.
+
+    Constraints (single-tree)
+    -------------------------
+    - `stem_base`: shape `(3,)`, finite
+    - `top_height`: finite, `> 0`
+    - `crown_ratio`: in `(0, 1]` (avoid zero-length crowns where base==apex)
+    - `lean_severity`: in `[0, 90)` (strictly < 90 to avoid `tan(pi/2)` overflow)
+    - `crown_radii`: shape `(4,)`, finite, `>= 0`, not all zeros
+    - `crown_edge_heights`: shape `(4,)`, finite, in `[0, 1)` (avoid peripheral line at apex)
+    - `crown_shapes`: shape `(2,4)`, finite, strictly `> 0`
+
     Parameters
     ----------
     stem_base : array with shape(3,)
@@ -516,13 +537,13 @@ def _make_crown_hull(
         stem_base, top_height, lean_direction, lean_severity
     )
 
-    crown_radii_j = jnp.asarray(crown_radii)
-    crown_edge_heights_j = jnp.asarray(crown_edge_heights)
-    crown_shapes_j = jnp.asarray(crown_shapes)
+    crown_radii_array = jnp.asarray(crown_radii)
+    crown_edge_heights_array = jnp.asarray(crown_edge_heights)
+    crown_shapes_array = jnp.asarray(crown_shapes)
 
     periph_points = _get_peripheral_points(
-        crown_radii=crown_radii_j,
-        crown_edge_heights=crown_edge_heights_j,
+        crown_radii=crown_radii_array,
+        crown_edge_heights=crown_edge_heights_array,
         top_height=jnp.asarray(top_height),
         crown_ratio=jnp.asarray(crown_ratio),
     )
@@ -576,8 +597,8 @@ def _make_crown_hull(
 
     # calculate the shape coefficients at each angle theta (relative to apex)
     # using linear interpolation
-    top_shapes_measured = crown_shapes_j[0]
-    bottom_shapes_measured = crown_shapes_j[1]
+    top_shapes_measured = crown_shapes_array[0]
+    bottom_shapes_measured = crown_shapes_array[1]
     top_shapes_interp = jnp.interp(
         grid_thetas,
         apex_vs_periph_points_thetas,
@@ -586,14 +607,24 @@ def _make_crown_hull(
     )
 
     # calculate crown radius at each height z for top of crown
-    top_hull_radii = (
-        (
-            1
-            - (grid_zs - periph_line_zs) ** top_shapes_interp
-            / (apex_z - periph_line_zs) ** top_shapes_interp
-        )
-        * apex_periph_line_radii**top_shapes_interp
-    ) ** (1 / top_shapes_interp)
+    #
+    # Clamp the height deltas to ≥ 0 before exponentiation.
+    # `grid_zs - periph_line_zs` is negative for points below the peripheral line.
+    # Those values are later masked out by `grid_top`, but JAX may still evaluate
+    # them during tracing. Negative bases to non-integer exponents produce NaNs.
+    top_delta_z = jnp.maximum(grid_zs - periph_line_zs, 0.0)
+    top_inner = (
+        1
+        - top_delta_z**top_shapes_interp
+        / (apex_z - periph_line_zs) ** top_shapes_interp
+    )
+    # Clamp the “inner” term to ≥ 0 before taking a fractional power.
+    # Floating point roundoff can make `top_inner` slightly negative (e.g. -1e-6),
+    # and `negative ** fractional` yields NaNs.
+    top_inner = jnp.maximum(top_inner, 0.0)
+    top_hull_radii = ((top_inner) * apex_periph_line_radii**top_shapes_interp) ** (
+        1 / top_shapes_interp
+    )
 
     # generate the full crown
     # calculate the angle between peripheral points and base axis
@@ -625,13 +656,29 @@ def _make_crown_hull(
     )
 
     # calculate crown radius at height z
+    #
+    # Clamp the height deltas to ≥ 0 before exponentiation.
+    # `periph_line_zs - grid_zs` is negative for points above the peripheral line.
+    # Those values are later masked out by `grid_bottom`, but JAX may still evaluate
+    # them during tracing. Negative bases to non-integer exponents produce NaNs.
+    bottom_delta_z = jnp.maximum(periph_line_zs - grid_zs, 0.0)
+    bottom_denom_z = periph_line_zs - base_z
+    # Make the bottom denominator safe when it’s exactly zero.
+    # This can happen at azimuths where `crown_edge_height == 0` (peripheral line at
+    # crown base). The bottom region at those azimuths is empty, but we still need
+    # the expression to be numerically safe under tracing.
+    bottom_denom_z_safe = jnp.where(bottom_denom_z == 0, 1.0, bottom_denom_z)
+    bottom_inner = (
+        1
+        - bottom_delta_z**bottom_shapes_interp
+        / bottom_denom_z_safe**bottom_shapes_interp
+    )
+    # Clamp the “inner” term to ≥ 0 before taking a fractional power.
+    # Floating point roundoff can make `bottom_inner` slightly negative, and
+    # `negative ** fractional` yields NaNs.
+    bottom_inner = jnp.maximum(bottom_inner, 0.0)
     bottom_hull_radii = (
-        (
-            1
-            - (periph_line_zs - grid_zs) ** bottom_shapes_interp
-            / (periph_line_zs - base_z) ** bottom_shapes_interp
-        )
-        * base_periph_line_radii**bottom_shapes_interp
+        (bottom_inner) * base_periph_line_radii**bottom_shapes_interp
     ) ** (1 / bottom_shapes_interp)
 
     hull_radii = jnp.where(grid_bottom, bottom_hull_radii, top_hull_radii)
