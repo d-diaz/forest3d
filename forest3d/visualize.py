@@ -482,27 +482,41 @@ def random_forest(n_trees: int) -> k3d.Plot:
     palette = sns.color_palette("colorblind", n_trees)
     plot = k3d.plot(grid_visible=False, height=700)
 
-    # bounds across ALL crowns
-    x_min = y_min = z_min = np.inf
-    x_max = y_max = z_max = -np.inf
-
     crowns_vertices = []  # store to avoid re-generating
     crowns_colors = []
 
     for _ in range(n_trees):
         points = _make_random_tree_crown()
-        x_min = min(x_min, float(points[:, 0].min()))
-        x_max = max(x_max, float(points[:, 0].max()))
-        y_min = min(y_min, float(points[:, 1].min()))
-        y_max = max(y_max, float(points[:, 1].max()))
-        z_min = min(z_min, float(points[:, 2].min()))
-        z_max = max(z_max, float(points[:, 2].max()))
-
         vertices = points.astype(np.float32)
         crowns_vertices.append(vertices)
 
         color = _rgb_to_k3d_int(palette[np.random.randint(0, len(palette))])
         crowns_colors.append(color)
+
+    # Bounds across ALL crowns.
+    #
+    # Note: with JAX-default math, some random parameter combinations can yield
+    # NaN/inf vertices (e.g., due to numeric edge cases). Ensure the DEM bounds
+    # are computed only from finite vertices so the flat DEM still encompasses
+    # all renderable crown geometry.
+    all_vertices = np.vstack(crowns_vertices) if crowns_vertices else np.empty((0, 3))
+    finite = all_vertices[np.isfinite(all_vertices).all(axis=1)]
+    if finite.size == 0:
+        x_min = y_min = 0.0
+        x_max = y_max = 1.0
+    else:
+        x_min = float(finite[:, 0].min())
+        x_max = float(finite[:, 0].max())
+        y_min = float(finite[:, 1].min())
+        y_max = float(finite[:, 1].max())
+
+    # Small padding so the DEM doesn't visually clip crowns at the edges.
+    x_pad = 0.05 * max(x_max - x_min, 1.0)
+    y_pad = 0.05 * max(y_max - y_min, 1.0)
+    x_min -= x_pad
+    x_max += x_pad
+    y_min -= y_pad
+    y_max += y_pad
 
     # Build a flat DEM
     flat = np.full((50, 50), float(0), dtype=np.float32)
