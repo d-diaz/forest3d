@@ -1,0 +1,51 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+]
+
+# Keep scientific code pragmatic; tighten over time.
+ignore = [
+  "E501", # line length (handled by formatter)
+]
+
+exclude = [
+  ".git",
+  ".venv",
+  "docs",
+  "notebooks",
+  "data",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["forest3d"]
+
+# Pragmatic defaults for a scientific stack; tighten later.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+warn_unreachable = true
+
+ignore_missing_imports = true
+
+# Avoid type-checking notebooks/docs (and keep visualization flexible initially).
+exclude = [
+  "(^docs/)",
+  "(^notebooks/)",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["forest3d/tests"]

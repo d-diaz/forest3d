@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from forest3d.utils.geometry import _make_crown_hull
+from forest3d.geometry.crown_hull import _make_crown_hull
 
 
 class Tree(BaseModel):
@@ -65,30 +65,42 @@ class Tree(BaseModel):
     lean_severity: float = Field(default=0, ge=0, lt=90)
     # NOTE: `crown_ratio` must be > 0. A zero-length crown degenerates (base==apex)
     # and can produce division-by-zero in the hull radius equations.
-    crown_ratio: float | int = Field(default=0.65, gt=0, le=1.0)
+    crown_ratio: float = Field(default=0.65, gt=0, le=1.0)
     crown_radius: float | int | None = None
-    crown_radii: np.ndarray | tuple[float, float, float, float] | None = None
-    crown_edge_heights: np.ndarray | tuple[float, float, float, float] = np.array(
-        (0.3, 0.3, 0.3, 0.3)
+    crown_radii: np.ndarray | None = None
+    crown_edge_heights: np.ndarray = Field(
+        default_factory=lambda: np.array((0.3, 0.3, 0.3, 0.3), dtype=float)
     )
-    crown_shapes: (
-        np.ndarray
-        | tuple[tuple[float, float, float, float], tuple[float, float, float, float]]
-    ) = np.full((2, 4), fill_value=2.0)
+    crown_shapes: np.ndarray = Field(
+        default_factory=lambda: np.full((2, 4), fill_value=2.0)
+    )
 
     @model_validator(mode="before")
-    def crown_radii_from_radius(self):
-        """Calculates crown radii if a single radius is given."""
-        if "crown_radius" in self and "crown_radii" not in self:
-            self["crown_radii"] = np.full(4, self["crown_radius"])
-        return self
+    def default_crown_radii(cls, data):
+        """Ensure `crown_radii` is present and array-like.
 
-    @model_validator(mode="after")
-    def default_crown_radii(self):
-        """Sets default value for crown radii as 25% of height."""
-        if self.crown_radii is None:
-            self.crown_radii = np.full(4, 0.25 * self.top_height)
-        return self
+        Precedence:
+        - If `crown_radii` provided, keep it.
+        - Else if `crown_radius` provided, expand to E,N,W,S.
+        - Else default to 25% of `top_height`.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        if "crown_radii" in data and data["crown_radii"] is not None:
+            return data
+
+        if "crown_radius" in data and data["crown_radius"] is not None:
+            data["crown_radii"] = np.full(4, data["crown_radius"], dtype=float)
+            return data
+
+        # Fall back to 25% of height (requires top_height to be present).
+        if "top_height" in data and data["top_height"] is not None:
+            data["crown_radii"] = np.full(
+                4, 0.25 * float(data["top_height"]), dtype=float
+            )
+
+        return data
 
     @model_validator(mode="before")
     def percent_live_crown_to_ratio(self):
@@ -98,12 +110,35 @@ class Tree(BaseModel):
                 self["crown_ratio"] /= 100.0
         return self
 
+    @model_validator(mode="before")
+    def coerce_array_inputs(cls, data):
+        """Coerce array-like inputs into numpy arrays during initialization.
+
+        This keeps the public type hints as `np.ndarray` while still accepting
+        tuples/lists from user code and notebooks.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        if "crown_radii" in data and data["crown_radii"] is not None:
+            data["crown_radii"] = np.asarray(data["crown_radii"], dtype=float)
+
+        if "crown_edge_heights" in data and data["crown_edge_heights"] is not None:
+            data["crown_edge_heights"] = np.asarray(
+                data["crown_edge_heights"], dtype=float
+            )
+
+        if "crown_shapes" in data and data["crown_shapes"] is not None:
+            data["crown_shapes"] = np.asarray(data["crown_shapes"], dtype=float)
+
+        return data
+
     @model_validator(mode="after")
     def validate_hull_inputs(self):
         """Validates numeric constraints required by the crown hull generator.
 
         These checks exist to prevent known NaN/inf failure modes in
-        `forest3d.utils.geometry._make_crown_hull`, while keeping the hull itself
+        `forest3d.geometry.crown_hull._make_crown_hull`, while keeping the hull itself
         free of eager Python-side validation (important for JAX `jit` workflows).
         """
         # Scalar finiteness checks (Pydantic range constraints do not reject NaN).
@@ -183,6 +218,8 @@ class Tree(BaseModel):
         Returns:
         np.ndarray of points array with shape (num_z * num_theta, 3)
         """
+        assert self.crown_radii is not None  # to satisfy mypy
+
         return np.asarray(
             _make_crown_hull(
                 stem_base=self.stem_base,

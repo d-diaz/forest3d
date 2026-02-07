@@ -27,7 +27,8 @@ class TreeListDataFrameModel(pa.DataFrameModel):
         strict = False
 
     @pa.dataframe_check
-    def not_empty(cls, df):
+    @classmethod
+    def not_empty(cls, df: pd.DataFrame) -> bool:
         """Raises if dataframe is empty."""
         return not df.empty
 

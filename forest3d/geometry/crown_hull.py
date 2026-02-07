@@ -12,7 +12,7 @@ from jax import Array
 from jax.typing import ArrayLike
 from shapely.geometry import Point, Polygon
 
-from forest3d.models.hull_params import TreeHullParams
+from forest3d.geometry.params import TreeHullParams
 
 
 def _make_crown_hull_from_params(
@@ -76,7 +76,7 @@ def _arrays_equal_shape(*args: np.ndarray, raise_exc: bool = True) -> bool:
     """
     arrs = [np.asanyarray(arg) for arg in args]
     shapes = np.array([arr.shape for arr in arrs])
-    equal_shapes = np.all(shapes == shapes[0])
+    equal_shapes = bool(np.all(shapes == shapes[0]))
 
     if not equal_shapes and raise_exc:
         message = f"Input shapes mismatch: {shapes}"
@@ -251,30 +251,52 @@ def _get_peripheral_points(
     crown_base_height = top_height * (1 - crown_ratio)
     crown_length = crown_ratio * top_height
 
-    (crown_radius_east, crown_radius_north, crown_radius_west, crown_radius_south) = (
-        crown_radii
-    )
-    (crown_edgeht_east, crown_edgeht_north, crown_edgeht_west, crown_edgeht_south) = (
-        crown_edge_heights
-    )
+    crown_radii = jnp.asarray(crown_radii)
+    crown_edge_heights = jnp.asarray(crown_edge_heights)
+
+    crown_radius_east = crown_radii[0]
+    crown_radius_north = crown_radii[1]
+    crown_radius_west = crown_radii[2]
+    crown_radius_south = crown_radii[3]
+
+    crown_edge_height_east = crown_edge_heights[0]
+    crown_edge_height_north = crown_edge_heights[1]
+    crown_edge_height_west = crown_edge_heights[2]
+    crown_edge_height_south = crown_edge_heights[3]
 
     east_point = jnp.array(
-        (crown_radius_east, 0, crown_base_height + crown_edgeht_east * crown_length),
+        (
+            crown_radius_east,
+            0,
+            crown_base_height + crown_edge_height_east * crown_length,
+        ),
         dtype=float,
     )
 
     north_point = jnp.array(
-        (0, crown_radius_north, crown_base_height + crown_edgeht_north * crown_length),
+        (
+            0,
+            crown_radius_north,
+            crown_base_height + crown_edge_height_north * crown_length,
+        ),
         dtype=float,
     )
 
     west_point = jnp.array(
-        (-crown_radius_west, 0, crown_base_height + crown_edgeht_west * crown_length),
+        (
+            -crown_radius_west,
+            0,
+            crown_base_height + crown_edge_height_west * crown_length,
+        ),
         dtype=float,
     )
 
     south_point = jnp.array(
-        (0, -crown_radius_south, crown_base_height + crown_edgeht_south * crown_length),
+        (
+            0,
+            -crown_radius_south,
+            crown_base_height + crown_edge_height_south * crown_length,
+        ),
         dtype=float,
     )
 
@@ -307,7 +329,7 @@ def _get_hull_center_xy(crown_radii: ArrayLike) -> Array:
     return center_xy[:, 0]
 
 
-def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.ndarray:
+def _get_hull_eccentricity(crown_radii: ArrayLike, crown_ratio: ArrayLike) -> Array:
     """Calculates eccentricity-index values for an asymmetric hull.
 
     Represents a tree crown, with eccentricity-index values used to determine
@@ -359,8 +381,8 @@ def _get_hull_eccentricity(crown_radii: np.ndarray, crown_ratio: float) -> np.nd
 
 
 def _get_hull_apex_and_base(
-    crown_radii: np.ndarray, top_height: float | np.ndarray, crown_ratio: float
-) -> tuple[np.ndarray, np.ndarray]:
+    crown_radii: ArrayLike, top_height: ArrayLike, crown_ratio: ArrayLike
+) -> tuple[Array, Array]:
     """Calculates the (x,y,z) position of the apex and base of a tree crown.
 
     This models a tree crown as an asymmetric hull comprised of
@@ -455,20 +477,20 @@ def _get_circular_plot_boundary(
     xs = radius * np.cos(thetas) + x
     ys = radius * np.sin(thetas) + y
 
-    zs = get_elevation(dem, xs, ys) if dem else np.zeros(32)
+    zs = np.asanyarray(get_elevation(dem, xs, ys) if dem else np.zeros(32))
 
     return xs, ys, zs
 
 
 def _make_crown_hull(
-    stem_base: np.ndarray,
-    top_height: float,
-    crown_ratio: float,
-    lean_direction: float,
-    lean_severity: float,
-    crown_radii: np.ndarray,
-    crown_edge_heights: np.ndarray,
-    crown_shapes: np.ndarray,
+    stem_base: ArrayLike,
+    top_height: ArrayLike,
+    crown_ratio: ArrayLike,
+    lean_direction: ArrayLike,
+    lean_severity: ArrayLike,
+    crown_radii: ArrayLike,
+    crown_edge_heights: ArrayLike,
+    crown_shapes: ArrayLike,
     num_theta: int = 32,
     num_z: int = 50,
 ) -> Array:
