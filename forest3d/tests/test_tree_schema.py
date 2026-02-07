@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from forest3d.models.dataclass import Tree
+from forest3d.schemas.tree import Tree
 
 TREE_WITH_RADIUS = {
     "species": "abc",
