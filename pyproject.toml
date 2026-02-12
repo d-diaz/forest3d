@@ -1,3 +1,57 @@
+[project]
+name = "forest3d"
+version = "0.2.0"
+description = "Methods for generating 3D models of forest inventory plots and co-registering plot data with canopy height rasters and point clouds."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "David Diaz" }]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.environments]
+dev = ["dev"]
+cuda = ["cuda"]
+dev-cuda = ["dev", "cuda"]
+
+[tool.pixi.pypi-dependencies]
+jax = { extras = ["cpu"] }
+laspy = { extras = ["lazrs"] }
+numpyro = "*"
+
+[tool.pixi.feature.cuda.pypi-dependencies]
+jax = { extras = ["cuda13"] }
+
+[tool.pixi.pypi-options]
+index-url = "https://pypi.org/simple"
+find-links = [{ url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html" }]
+
+[tool.pixi.dependencies]
+python = ">=3.10,<3.13"
+geopandas = "*"
+ipywidgets = "*"
+jupyter = "*"
+k3d = "*"
+matplotlib = "*"
+numpy = "*"
+pandas = "*"
+pandera = "*"
+pdal = "*"
+pydantic = "*"
+python-pdal = "*"
+rasterio = "*"
+seaborn = "*"
+
+[tool.pixi.feature.dev.dependencies]
+ipykernel = "*"
+mypy = "*"
+pre-commit = "*"
+pytest = "*"
+ruff = "*"
+sphinx = "*"
+sphinx-rtd-theme = "*"
+
 [tool.ruff]
 target-version = "py310"
 line-length = 88
@@ -32,7 +86,6 @@ line-ending = "auto"
 python_version = "3.10"
 files = ["forest3d"]
 
-# Pragmatic defaults for a scientific stack; tighten later.
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_return_any = false
