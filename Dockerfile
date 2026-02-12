@@ -1,33 +1,19 @@
-############################
-# Common build args
-############################
-ARG CPU_BASE_IMAGE=ubuntu:22.04
-ARG GPU_BASE_IMAGE=nvidia/cuda:12.9.1-runtime-ubuntu22.04
+FROM ghcr.io/prefix-dev/pixi:latest as base
 
-############################
-# CPU target
-############################
-FROM ${CPU_BASE_IMAGE} AS cpu
+ARG USER_NAME=morelia
+ARG USER_UID=1000
+ARG USER_GID=1000
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git python3 python3-pip python3-dev build-essential curl ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# free existing UID/GID if they are occupied
+RUN (id -u ${USER_UID} >/dev/null 2>&1 && userdel -r $(id -nu ${USER_UID}) || true) && \
+    (getent group ${USER_GID} >/dev/null 2>&1 && groupdel $(getent group ${USER_GID} | cut -d: -f1) || true) && \
+    groupadd -g ${USER_GID} ${USER_NAME} && \
+    useradd -m -u ${USER_UID} -g ${USER_GID} ${USER_NAME}
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /usr/local/bin/uv
+RUN mkdir -p /workspace/forest3d && \
+    chown -R "${USER_UID}:${USER_GID}" /workspace
 
-COPY requirements-*.txt .
-RUN uv pip install --system -r requirements-cpu.txt && rm requirements-*.txt
-
-############################
-# GPU target
-############################
-FROM ${GPU_BASE_IMAGE} AS gpu
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git python3 python3-pip python3-dev build-essential curl ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /usr/local/bin/uv
-
-COPY requirements-*.txt .
-RUN uv pip install --system -r requirements-gpu.txt && rm requirements-*.txt
+USER ${USER_NAME}
+WORKDIR /workspace/forest3d
+COPY pyproject.toml pixi.lock* ./
+RUN pixi install -e dev

@@ -1,7 +1,0 @@
-ipykernel
-mypy
-pre-commit
-pytest
-ruff
-sphinx
-sphinx-rtd-theme

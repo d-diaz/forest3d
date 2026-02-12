@@ -1,4 +1,0 @@
--r requirements-base.txt
-# cpu versions
-jax[cpu]
-numpyro
