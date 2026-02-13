@@ -1,0 +1,37 @@
+name: build
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "pixi.toml"
+      - "pixi.lock*"
+      - "Dockerfile"
+  pull_request:
+    paths:
+      - "pixi.toml"
+      - "pixi.lock*"
+      - "Dockerfile"
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          build-args: |
+            USER_UID=1000
+            USER_GID=1000
+            USER_NAME=runner
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
