@@ -15,5 +15,5 @@ RUN mkdir -p /workspace/forest3d && \
 
 USER ${USER_NAME}
 WORKDIR /workspace/forest3d
-COPY pyproject.toml pixi.lock* ./
-RUN pixi install -e dev
+COPY pixi.toml pixi.lock* ./
+RUN pixi install
