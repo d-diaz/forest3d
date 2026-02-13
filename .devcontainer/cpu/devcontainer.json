@@ -68,7 +68,7 @@
     "--name",
     "forest3d-dev-cpu"
   ],
-  "postCreateCommand": "pixi run -e dev pre-commit install",
+  "postCreateCommand": "pixi install -e dev && pixi run -e dev pre-commit install",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/forest3d,type=bind",
   "workspaceFolder": "/workspace/forest3d"
 }
