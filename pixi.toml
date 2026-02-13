@@ -1,0 +1,54 @@
+[workspace]
+name = "forest3d"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[environments]
+dev = ["dev"]
+cuda = ["cuda"]
+dev-cuda = ["dev", "cuda"]
+
+[dependencies]
+python = ">=3.10,<3.13"
+geopandas = "*"
+ipywidgets = "*"
+jupyter = "*"
+k3d = "*"
+matplotlib = "*"
+numpy = "*"
+pandas = "*"
+pandera = "*"
+pdal = "*"
+pydantic = "*"
+python-pdal = "*"
+rasterio = "*"
+seaborn = "*"
+
+[pypi-dependencies]
+jax = { extras = ["cpu"] }
+laspy = { extras = ["lazrs"] }
+numpyro = "*"
+
+[feature.cuda.pypi-dependencies]
+jax = { extras = ["cuda13"] }
+
+[pypi-options]
+index-url = "https://pypi.org/simple"
+find-links = [{ url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html" }]
+
+[feature.dev.dependencies]
+ipykernel = "*"
+mypy = "*"
+pre-commit = "*"
+pytest = "*"
+ruff = "*"
+sphinx = "*"
+sphinx-rtd-theme = "*"
+
+[tasks]
+ruff-check = "ruff check ."
+ruff-format-check = "ruff format --check ."
+lint = { depends-on = ["ruff-format-check", "ruff-check"] }
+typecheck = "mypy"
+test = "pytest"
+ci = { depends-on = ["lint", "typecheck", "test"] }
