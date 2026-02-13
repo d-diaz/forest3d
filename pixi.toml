@@ -42,8 +42,6 @@ mypy = "*"
 pre-commit = "*"
 pytest = "*"
 ruff = "*"
-sphinx = "*"
-sphinx-rtd-theme = "*"
 
 [tasks]
 ruff-check = "ruff check ."
