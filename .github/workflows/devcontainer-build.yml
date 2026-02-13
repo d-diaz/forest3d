@@ -1,0 +1,33 @@
+name: devcontainer-build
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".devcontainer/**/devcontainer.json"
+  pull_request:
+    paths:
+      - ".devcontainer/**/devcontainer.json"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - .devcontainer/cpu/devcontainer.json
+          - .devcontainer/gpu/devcontainer.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build dev container image
+        run: |
+          docker run --rm \
+            -e USER=runner \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" \
+            -w /work \
+            ghcr.io/devcontainers/cli:latest \
+            devcontainer build --workspace-folder . --config "${{ matrix.config }}"
