@@ -514,7 +514,8 @@ def _make_crown_hull(
     - `crown_ratio`: in `(0, 1]` (avoid zero-length crowns where base==apex)
     - `lean_severity`: in `[0, 90)` (strictly < 90 to avoid `tan(pi/2)` overflow)
     - `crown_radii`: shape `(4,)`, finite, `>= 0`, not all zeros
-    - `crown_edge_heights`: shape `(4,)`, finite, in `[0, 1)` (avoid peripheral line at apex)
+    - `crown_edge_heights`: shape `(4,)`, finite, in `[0, 1)` (avoid peripheral
+        line at apex)
     - `crown_shapes`: shape `(2,4)`, finite, strictly `> 0`
 
     Parameters

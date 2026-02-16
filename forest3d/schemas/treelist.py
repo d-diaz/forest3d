@@ -53,7 +53,7 @@ class TreeListGeoDataFrameModel(TreeListDataFrameModel):
 
     @classmethod
     def from_file(cls, path_to_file: str | os.PathLike) -> TreeListGeoDataFrameModel:
-        """Reads and validates treelist gdf from any file type recognized by GeoPandas."""
+        """Validates treelist from any file type recognized by GeoPandas."""
         return cls(gpd.read_file(path_to_file))
 
     @classmethod

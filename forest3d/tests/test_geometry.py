@@ -6,7 +6,7 @@ from forest3d.geometry.crown_hull import _get_treetop_location
 
 
 def test_treetop_getter_single_point_result_format():
-    """_get_treetop_location returns array with shape (3,) when single point provided."""
+    """_get_treetop_location returns shape (3,) when single point provided."""
     args = [(0, 0, 0), 100]  # x, y, z, and height
     result = _get_treetop_location(*args)
     assert isinstance(result, Array)
