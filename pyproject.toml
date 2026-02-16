@@ -3,11 +3,11 @@ name = "forest3d"
 version = "0.2.0"
 description = "Methods for generating 3D models of forest inventory plots and co-registering plot data with canopy height rasters and point clouds."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.14"
 authors = [{ name = "David Diaz" }]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
@@ -20,7 +20,6 @@ select = [
 
 # Keep scientific code pragmatic; tighten over time.
 ignore = [
-  "E501", # line length (handled by formatter)
 ]
 
 exclude = [
@@ -35,9 +34,11 @@ exclude = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = 72
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 files = ["forest3d"]
 
 warn_unused_ignores = true

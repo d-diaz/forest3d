@@ -9,7 +9,7 @@ cuda = ["cuda"]
 dev-cuda = ["dev", "cuda"]
 
 [dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.11,<3.14"
 geopandas = "*"
 ipywidgets = "*"
 jupyter = "*"
