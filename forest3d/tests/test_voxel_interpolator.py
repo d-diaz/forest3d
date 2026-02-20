@@ -106,6 +106,7 @@ def test_voxel_grid_interpolator_rejects_non_uniform_or_non_monotone_axes():
 
 
 def test_voxel_grid_interpolator_preserves_float32_when_inputs_float32():
+    """Guard against accidental dtype promotion in the hot path (performance)."""
     x = np.array([0.0, 1.0], dtype=np.float32)
     y = np.array([0.0, 1.0], dtype=np.float32)
     z = np.array([0.0, 1.0], dtype=np.float32)
@@ -115,3 +116,44 @@ def test_voxel_grid_interpolator_preserves_float32_when_inputs_float32():
     pts = np.array([[0.25, 0.25, 0.25]], dtype=np.float32)
     out = rgi(pts)
     assert np.asarray(out).dtype == np.float32
+
+
+def test_voxel_grid_interpolator_rejects_invalid_xi_shape():
+    """Fail fast on malformed query inputs to avoid silent broadcasting bugs."""
+    x = np.array([0.0, 1.0], dtype=float)
+    y = np.array([0.0, 1.0], dtype=float)
+    z = np.array([0.0, 1.0], dtype=float)
+    values = np.zeros((2, 2, 2), dtype=np.float32)
+    rgi = VoxelGridInterpolator((x, y, z), values)
+
+    with pytest.raises(ValueError, match=r"xi must have shape"):
+        rgi(np.array([0.1, 0.2], dtype=float))  # (...,2) not (...,3)
+
+    with pytest.raises(ValueError, match=r"xi must have shape"):
+        rgi(np.zeros((4, 4), dtype=float))  # (4,4) last dim != 3
+
+
+def test_voxel_grid_interpolator_supports_higher_rank_xi_shapes():
+    """Ensure __call__ preserves leading batch dimensions (...,3) -> (...)."""
+    x = np.array([0.0, 1.0], dtype=float)
+    y = np.array([0.0, 1.0], dtype=float)
+    z = np.array([0.0, 1.0], dtype=float)
+    values = np.ones((2, 2, 2), dtype=np.float32)
+    rgi = VoxelGridInterpolator((x, y, z), values)
+
+    pts = np.zeros((2, 3, 4, 3), dtype=float)  # (B1,B2,N,3)
+    out = np.asarray(rgi(pts))
+    assert out.shape == (2, 3, 4)
+
+
+def test_voxel_grid_interpolator_nan_query_propagates():
+    """Make NaN behavior explicit: NaNs in xi should produce NaNs in output."""
+    x = np.array([0.0, 1.0], dtype=float)
+    y = np.array([0.0, 1.0], dtype=float)
+    z = np.array([0.0, 1.0], dtype=float)
+    values = np.ones((2, 2, 2), dtype=np.float32)
+    rgi = VoxelGridInterpolator((x, y, z), values)
+
+    pts = np.array([[np.nan, 0.5, 0.5]], dtype=float)
+    out = np.asarray(rgi(pts))
+    assert np.isnan(out).all()
