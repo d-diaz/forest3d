@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 from forest3d.geospatial.coordinates import CoordinateSystem
 
@@ -91,8 +92,6 @@ def distance_field_from_surface(
             "surface z-values exceed voxel grid vertical bounds: "
             f"surface∈[{smin},{smax}], cs.z∈[{cs.zmin},{cs.zmax})."
         )
-
-    from scipy.ndimage import distance_transform_edt
 
     x, y, z = voxel_centers_from_coordinate_system(cs)
 

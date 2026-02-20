@@ -1,4 +1,7 @@
+import laspy
 import numpy as np
+import rasterio
+from rasterio.transform import from_origin
 
 from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.geospatial.enums import GridKind, IntegerMode
@@ -70,9 +73,6 @@ def test_xyz_to_ijk_float_first_and_integer_modes():
 
 
 def test_coordinates_from_raster_reads_bounds_and_resolution(tmp_path):
-    import rasterio
-    from rasterio.transform import from_origin
-
     # 3 cols (x), 2 rows (y). Pixel size: dx=1.0, dy=2.0
     xmin = 100.0
     ymax = 200.0
@@ -110,8 +110,6 @@ def test_coordinates_from_raster_reads_bounds_and_resolution(tmp_path):
 
 
 def test_coordinates_from_las_snaps_bounds_and_infers_z(tmp_path):
-    import laspy
-
     # Points define mins/maxs that are not aligned to dx/dy/dz.
     xs = np.array([0.2, 2.3], dtype=float)
     ys = np.array([10.2, 12.3], dtype=float)

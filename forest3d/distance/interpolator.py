@@ -31,6 +31,8 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
+from forest3d.distance import DistanceField
+
 
 def _as_1d_points(name: str, p: ArrayLike) -> Array:
     arr = jnp.asarray(p)
@@ -209,6 +211,13 @@ class VoxelGridInterpolator:
         object.__setattr__(obj, "zmax", zmax)
         object.__setattr__(obj, "values", values)
         return obj
+
+    @staticmethod
+    def from_distance_field(distance_field: DistanceField) -> VoxelGridInterpolator:
+        return VoxelGridInterpolator(
+            points=(distance_field.x, distance_field.y, distance_field.z),
+            values=distance_field.values,
+        )
 
     def __call__(self, xi: ArrayLike) -> Array:
         """Evaluate interpolated values at query points `xi`.
