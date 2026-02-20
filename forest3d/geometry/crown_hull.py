@@ -16,7 +16,10 @@ from forest3d.geometry.params import TreeHullParams
 
 
 def _make_crown_hull_from_params(
-    params: TreeHullParams, *, num_theta: int = 32, num_z: int = 50
+    params: TreeHullParams,
+    *,
+    num_theta: int = 32,
+    num_z: int = 50,
 ) -> Array:
     """Convenience wrapper around `_make_crown_hull` that takes a params container."""
     return _make_crown_hull(
@@ -34,7 +37,10 @@ def _make_crown_hull_from_params(
 
 
 def _make_crown_hull_batched(
-    params: TreeHullParams, *, num_theta: int = 32, num_z: int = 50
+    params: TreeHullParams,
+    *,
+    num_theta: int = 32,
+    num_z: int = 50,
 ) -> Array:
     """Vectorized crown hull over a batch of trees.
 
