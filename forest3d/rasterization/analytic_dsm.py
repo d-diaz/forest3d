@@ -11,16 +11,33 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import jax.numpy as jnp
 from jax import Array, lax
+from jax.typing import ArrayLike
 
-from forest3d.geometry.crown import AzimuthalProfile, CrownModel
+from forest3d.geometry.crown import (
+    AzimuthalProfile,
+    CrownAnchors,
+    CrownApex,
+    PeripheralPoints,
+    TreePose,
+)
 from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
 from forest3d.geospatial.coordinates import CoordinateSystem
 
 _SurfaceLikeParams = CrownHullParams | CrownSurfaceParams
+
+
+class _TreeLike(Protocol):
+    stem_base: ArrayLike
+    top_height: ArrayLike
+    crown_ratio: ArrayLike
+    lean_direction: ArrayLike
+    lean_severity: ArrayLike
+    crown_radii: ArrayLike
+    crown_edge_heights: ArrayLike
 
 
 class DsmPixelLocation(StrEnum):
@@ -120,12 +137,7 @@ def make_analytic_dsm(
             dtype=dtype,
         )
 
-        az = AzimuthalProfile.from_model(
-            model=inv.model,
-            theta=theta,
-            period=period,
-            dtype=dtype,
-        )
+        az = _azimuthal_profile(inv=inv, theta=theta, period=period, dtype=dtype)
         z_local, inside = _upper_crown_surface_z(r=r, inv=inv, az=az)
         z_global = z_local + inv.top_tz
 
@@ -159,11 +171,6 @@ def make_analytic_dsm(
 
 @dataclass(frozen=True)
 class _TreeInvariants:
-    top_height: Array
-    crown_ratio: Array
-    crown_radii: Array
-    crown_edge_heights: Array
-    top_shape_anchors: Array
     top_tx: Array
     top_ty: Array
     top_tz: Array
@@ -173,31 +180,40 @@ class _TreeInvariants:
     apex_x: Array
     apex_y: Array
     apex_z: Array
-    model: CrownModel
+    periph_x: Array
+    periph_y: Array
+    periph_z: Array
+    top_shapes: Array
 
     @staticmethod
     def from_tree(tree: _SurfaceLikeParams, *, dtype: jnp.dtype) -> _TreeInvariants:
-        model = CrownModel.from_tree(tree, dtype=dtype, include_base=False)
-        top_height = model.top_height
-        crown_ratio = model.crown_ratio
-        crown_radii = model.anchors.crown_radii
-        crown_edge_heights = model.anchors.crown_edge_heights
-        top_shape_anchors = model.anchors.top_shapes
+        pose = TreePose.from_tree(cast(_TreeLike, tree))
+        if isinstance(tree, CrownHullParams):
+            anchors = CrownAnchors.from_hull(tree)
+        else:
+            anchors = CrownAnchors.from_crown_surface_params(tree)
 
-        top_tx, top_ty, top_tz = model.pose.tx, model.pose.ty, model.pose.tz
-        apex_x_local, apex_y_local, apex_z_local = (
-            model.apex_local.x,
-            model.apex_local.y,
-            model.apex_local.z,
+        top_tx, top_ty, top_tz = pose.tx, pose.ty, pose.tz
+
+        apex = CrownApex.from_params(
+            crown_radii=anchors.crown_radii,
+            top_height=jnp.asarray(tree.top_height, dtype=dtype),
+            crown_ratio=jnp.asarray(tree.crown_ratio, dtype=dtype),
+        ).local
+        apex_x_local, apex_y_local, apex_z_local = apex.x, apex.y, apex.z
+        apex_x = (top_tx + apex_x_local).astype(dtype)
+        apex_y = (top_ty + apex_y_local).astype(dtype)
+        apex_z = (top_tz + apex_z_local).astype(dtype)
+
+        periph = PeripheralPoints.from_params(
+            crown_radii=anchors.crown_radii,
+            crown_edge_heights=anchors.crown_edge_heights,
+            top_height=jnp.asarray(tree.top_height, dtype=dtype),
+            crown_ratio=jnp.asarray(tree.crown_ratio, dtype=dtype),
         )
-        apex_x, apex_y, apex_z = model.apex_global(dtype=dtype)
+        periph_x, periph_y, periph_z = periph.x, periph.y, periph.z
 
         return _TreeInvariants(
-            top_height=top_height,
-            crown_ratio=crown_ratio,
-            crown_radii=crown_radii,
-            crown_edge_heights=crown_edge_heights,
-            top_shape_anchors=top_shape_anchors,
             top_tx=top_tx,
             top_ty=top_ty,
             top_tz=top_tz,
@@ -207,7 +223,10 @@ class _TreeInvariants:
             apex_x=apex_x,
             apex_y=apex_y,
             apex_z=apex_z,
-            model=model,
+            periph_x=periph_x,
+            periph_y=periph_y,
+            periph_z=periph_z,
+            top_shapes=anchors.top_shapes,
         )
 
 
@@ -355,6 +374,39 @@ def _upper_crown_surface_z(
     z_local = periph_z_local + (apex_z_local - periph_z_local) * u
     inside = (crown_edge_radius > 0) & (r <= crown_edge_radius)
     return z_local, inside
+
+
+def _azimuthal_profile(
+    *,
+    inv: _TreeInvariants,
+    theta: Array,
+    period: Array,
+    dtype: jnp.dtype,
+) -> AzimuthalProfile:
+    """Compute theta-dependent surface profile terms for analytic DSM."""
+    periph_drop_from_apex = inv.apex_z_local - inv.periph_z
+    periph_radius_from_apex = jnp.hypot(
+        inv.periph_y - inv.apex_y_local, inv.periph_x - inv.apex_x_local
+    )
+    periph_theta = jnp.arctan2(
+        inv.periph_y - inv.apex_y_local, inv.periph_x - inv.apex_x_local
+    ).astype(dtype)
+
+    crown_edge_radius = jnp.interp(
+        theta, periph_theta, periph_radius_from_apex.astype(dtype), period=period
+    )
+    periph_drop = jnp.interp(
+        theta, periph_theta, periph_drop_from_apex.astype(dtype), period=period
+    )
+    periph_z_local = inv.apex_z_local - periph_drop
+    top_shape = jnp.interp(
+        theta, periph_theta, inv.top_shapes.astype(dtype), period=period
+    )
+    return AzimuthalProfile(
+        crown_edge_radius=crown_edge_radius,
+        periph_z_local=periph_z_local,
+        top_shape=top_shape,
+    )
 
 
 def _scatter_max_window(
