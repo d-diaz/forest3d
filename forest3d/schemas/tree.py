@@ -3,7 +3,8 @@ from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from forest3d.geometry.crown_hull import _make_crown_hull
+from forest3d.geometry.crown import make_crown_hull
+from forest3d.geometry.params import CrownHullParams
 
 
 class Tree(BaseModel):
@@ -75,6 +76,13 @@ class Tree(BaseModel):
         default_factory=lambda: np.full((2, 4), fill_value=2.0)
     )
 
+    @property
+    def stem_base(self) -> np.ndarray:
+        """Coordinates for the base of the stem."""
+        return np.array((self.stem_x, self.stem_y, self.stem_z))
+
+    stem_base = computed_field(stem_base)
+
     @model_validator(mode="before")
     def default_crown_radii(cls, data):
         """Ensure `crown_radii` is present and array-like.
@@ -138,7 +146,7 @@ class Tree(BaseModel):
         """Validates numeric constraints required by the crown hull generator.
 
         These checks exist to prevent known NaN/inf failure modes in
-        `forest3d.geometry.crown_hull._make_crown_hull`, while keeping the hull itself
+        `forest3d.geometry.crown.make_crown_hull`, while keeping the hull itself
         free of eager Python-side validation (important for JAX `jit` workflows).
         """
         # Scalar finiteness checks (Pydantic range constraints do not reject NaN).
@@ -199,13 +207,6 @@ class Tree(BaseModel):
 
         return self
 
-    @property
-    def stem_base(self) -> np.ndarray:
-        """Coordinates for the base of the stem."""
-        return np.array((self.stem_x, self.stem_y, self.stem_z))
-
-    stem_base = computed_field(stem_base)
-
     def crown(self, num_theta: int = 32, num_z: int = 50) -> np.ndarray:
         """Generates a crown hull for this tree.
 
@@ -220,17 +221,14 @@ class Tree(BaseModel):
         """
         assert self.crown_radii is not None  # to satisfy mypy
 
-        return np.asarray(
-            _make_crown_hull(
-                stem_base=self.stem_base,
-                top_height=self.top_height,
-                crown_ratio=self.crown_ratio,
-                lean_direction=self.lean_direction,
-                lean_severity=self.lean_severity,
-                crown_radii=self.crown_radii,
-                crown_edge_heights=self.crown_edge_heights,
-                crown_shapes=self.crown_shapes,
-                num_theta=num_theta,
-                num_z=num_z,
-            )
+        params = CrownHullParams(
+            stem_base=self.stem_base,
+            top_height=self.top_height,
+            crown_ratio=self.crown_ratio,
+            lean_direction=self.lean_direction,
+            lean_severity=self.lean_severity,
+            crown_radii=self.crown_radii,
+            crown_edge_heights=self.crown_edge_heights,
+            crown_shapes=self.crown_shapes,
         )
+        return np.asarray(make_crown_hull(params, num_theta=num_theta, num_z=num_z))

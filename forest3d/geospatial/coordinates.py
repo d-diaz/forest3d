@@ -107,6 +107,18 @@ class CoordinateSystem:
     e: float | None = None
     f: float | None = None
 
+    @property
+    def nx(self) -> int:
+        return int(round((self.xmax - self.xmin) / self.dx))
+
+    @property
+    def ny(self) -> int:
+        return int(round((self.ymax - self.ymin) / self.dy))
+
+    @property
+    def nz(self) -> int:
+        return int(round((self.zmax - self.zmin) / self.dz))
+
     @staticmethod
     def from_bounds(
         *,
@@ -334,18 +346,6 @@ class CoordinateSystem:
             dy=float(dy),
             dz=float(dz),
         )
-
-    @property
-    def nx(self) -> int:
-        return int(round((self.xmax - self.xmin) / self.dx))
-
-    @property
-    def ny(self) -> int:
-        return int(round((self.ymax - self.ymin) / self.dy))
-
-    @property
-    def nz(self) -> int:
-        return int(round((self.zmax - self.zmin) / self.dz))
 
     def xyz_to_ijk(
         self,

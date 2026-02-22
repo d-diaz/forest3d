@@ -28,8 +28,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from forest3d.geometry.crown_hull import _make_crown_hull_batched
-from forest3d.geometry.params import CrownSurfaceParams, TreeHullParams
+from forest3d.geometry.crown import make_crown_hull_batched
+from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
 from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.rasterization.analytic_dsm import (
     make_analytic_dsm,
@@ -70,7 +70,7 @@ def _make_batched_hull_params(
     *,
     stem_spacing: float = 15.0,
     origin_xy: tuple[float, float] = (10.0, 10.0),
-) -> TreeHullParams:
+) -> CrownHullParams:
     """Deterministic grid of stems; constant crown geometry.
 
     `stem_spacing` keeps tree density roughly constant as `B` grows. It is in the
@@ -105,7 +105,7 @@ def _make_batched_hull_params(
     crown_edge_heights = jnp.full((B, 4), 0.3, dtype=jnp.float32)
     crown_shapes = jnp.full((B, 2, 4), 2.0, dtype=jnp.float32)
 
-    return TreeHullParams(
+    return CrownHullParams(
         stem_base=stem_base,
         top_height=top_height,
         crown_ratio=crown_ratio,
@@ -118,7 +118,7 @@ def _make_batched_hull_params(
 
 
 def _make_cs_for_params(
-    params: TreeHullParams,
+    params: CrownHullParams,
     *,
     dx: float = 0.5,
     dy: float = 0.5,
@@ -178,7 +178,7 @@ def test_bench_make_dsm_from_points(benchmark, B: int):
     cs = _make_cs_for_params(params)
     max_r = 8.0
     num_theta, num_z = _pc_sampling_for_raster(dx=float(cs.dx), max_crown_radius=max_r)
-    pts = _make_crown_hull_batched(params, num_theta=num_theta, num_z=num_z)  # (B,N,3)
+    pts = make_crown_hull_batched(params, num_theta=num_theta, num_z=num_z)  # (B,N,3)
     fill = jnp.asarray(cs.zmin, dtype=jnp.float32)
 
     g = jax.jit(lambda p: make_dsm(p, cs=cs, fill_value=fill))
@@ -205,7 +205,7 @@ def test_bench_make_dsm_end_to_end(benchmark, B: int):
 
     max_r = 8.0
     num_theta, num_z = _pc_sampling_for_raster(dx=float(cs.dx), max_crown_radius=max_r)
-    h = jax.jit(lambda p: _make_crown_hull_batched(p, num_theta=num_theta, num_z=num_z))
+    h = jax.jit(lambda p: make_crown_hull_batched(p, num_theta=num_theta, num_z=num_z))
     g = jax.jit(lambda pts: make_dsm(pts, cs=cs, fill_value=fill))
 
     # warmup compile
@@ -230,7 +230,7 @@ def test_bench_make_analytic_dsm_surface_params(benchmark, B: int):
     """
     hull = _make_batched_hull_params(B)
     cs = _make_cs_for_params(hull)
-    surface = CrownSurfaceParams.from_tree_hull_params(hull)
+    surface = CrownSurfaceParams.from_hull(hull)
     fill = jnp.asarray(cs.zmin, dtype=jnp.float32)
     max_r = 8.0
 

@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from jax import jit
 
-from forest3d.geometry.crown_hull import _make_crown_hull_batched
-from forest3d.geometry.params import CrownSurfaceParams, TreeHullParams
+from forest3d.geometry.crown import make_crown_hull_batched
+from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
 from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.rasterization.analytic_dsm import DsmPixelLocation, make_analytic_dsm
 from forest3d.rasterization.dsm import make_dsm
@@ -13,7 +13,7 @@ from forest3d.rasterization.dsm import make_dsm
 
 @pytest.fixture
 def single_tree_params():
-    def _make(*, stem_x: float, stem_y: float) -> TreeHullParams:
+    def _make(*, stem_x: float, stem_y: float) -> CrownHullParams:
         # Symmetric radii => local apex at (0,0), so global apex xy == stem xy (no lean)
         stem_base = np.array([[stem_x, stem_y, 0.0]], dtype=np.float32)  # (B=1,3)
         top_height = np.array([10.0], dtype=np.float32)  # (B,)
@@ -25,7 +25,7 @@ def single_tree_params():
         )  # (B,4) E,N,W,S
         crown_edge_heights = np.array([[0.3, 0.3, 0.3, 0.3]], dtype=np.float32)
         crown_shapes = np.full((1, 2, 4), fill_value=2.0, dtype=np.float32)  # (B,2,4)
-        return TreeHullParams(
+        return CrownHullParams(
             stem_base=stem_base,
             top_height=top_height,
             crown_ratio=crown_ratio,
@@ -151,7 +151,7 @@ def test_make_analytic_dsm_accepts_crown_surface_params(single_tree_params):
         dz=1.0,
     )
     hull = single_tree_params(stem_x=1.5, stem_y=1.5)
-    surface = CrownSurfaceParams.from_tree_hull_params(hull)
+    surface = CrownSurfaceParams.from_hull(hull)
 
     d1 = np.asarray(
         make_analytic_dsm(
@@ -169,9 +169,9 @@ def test_make_analytic_dsm_accepts_crown_surface_params(single_tree_params):
     np.testing.assert_allclose(d1, d2)
 
 
-def _unbatch_params(p: TreeHullParams) -> TreeHullParams:
-    """Convert a (B=1,...) TreeHullParams to single-tree shapes."""
-    return TreeHullParams(
+def _unbatch_params(p: CrownHullParams) -> CrownHullParams:
+    """Convert a (B=1,...) CrownHullParams to single-tree shapes."""
+    return CrownHullParams(
         stem_base=np.asarray(p.stem_base)[0],
         top_height=np.asarray(p.top_height)[0],
         crown_ratio=np.asarray(p.crown_ratio)[0],
@@ -183,7 +183,7 @@ def _unbatch_params(p: TreeHullParams) -> TreeHullParams:
     )
 
 
-def _make_forest_params(*, B: int = 9, spacing: float = 6.0) -> TreeHullParams:
+def _make_forest_params(*, B: int = 9, spacing: float = 6.0) -> CrownHullParams:
     """Deterministic small forest with varied crown parameters (batched)."""
     rng = np.random.default_rng(0)
     g = int(np.ceil(np.sqrt(B)))
@@ -204,7 +204,7 @@ def _make_forest_params(*, B: int = 9, spacing: float = 6.0) -> TreeHullParams:
     crown_shapes = np.full((B, 2, 4), 2.0, dtype=np.float32)
     crown_shapes[:, 0, :] = rng.uniform(1.2, 3.0, size=(B, 4)).astype(np.float32)
 
-    return TreeHullParams(
+    return CrownHullParams(
         stem_base=stem_base,
         top_height=top_height,
         crown_ratio=crown_ratio,
@@ -217,7 +217,7 @@ def _make_forest_params(*, B: int = 9, spacing: float = 6.0) -> TreeHullParams:
 
 
 @pytest.fixture
-def forest_params() -> TreeHullParams:
+def forest_params() -> CrownHullParams:
     # Small deterministic forest with varied tree geometry.
     return _make_forest_params(B=9, spacing=15.0)
 
@@ -236,7 +236,7 @@ def test_make_analytic_dsm_close_to_pointcloud_rasterized(forest_params):
     num_theta = int(min(1024, max(192, 4 * math.ceil(num_theta / 4))))
     num_z = 192
 
-    crown_points_batched = _make_crown_hull_batched(
+    crown_points_batched = make_crown_hull_batched(
         forest_params, num_theta=num_theta, num_z=num_z
     )
     crown_points = crown_points_batched.reshape((-1, 3))
