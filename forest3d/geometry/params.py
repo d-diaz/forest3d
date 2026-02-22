@@ -9,7 +9,7 @@ from jax.typing import ArrayLike
 
 @tree_util.register_dataclass
 @dataclass(frozen=True)
-class TreeHullParams:
+class CrownHullParams:
     """Parameter container for the crown hull (PyTree-friendly).
 
     This is intended for vmap/jit workflows, where parameters are passed around as a
@@ -48,7 +48,7 @@ class TreeHullParams:
 class CrownSurfaceParams:
     """Parameter container for analytic crown *surface* evaluators (PyTree-friendly).
 
-    This is a lightweight alternative to `TreeHullParams` intended for workflows
+    This is a lightweight alternative to `CrownHullParams` intended for workflows
     (simulation/optimization) that only require the *upper-crown surface* and do not
     need the lower-crown shape parameters.
 
@@ -69,7 +69,7 @@ class CrownSurfaceParams:
     crown_top_shapes: ArrayLike  # (4,) or (B,4); E,N,W,S
 
     @staticmethod
-    def from_tree_hull_params(params: TreeHullParams) -> CrownSurfaceParams:
+    def from_hull(params: CrownHullParams) -> CrownSurfaceParams:
         """Create surface params from full hull params.
 
         This drops the lower-crown shape parameters, keeping only the top-of-crown

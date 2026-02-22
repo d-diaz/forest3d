@@ -12,7 +12,7 @@ import pandas as pd
 import seaborn as sns
 from ipywidgets import Accordion, FloatSlider, HBox, Layout, VBox, interactive_output
 
-from forest3d.geometry.crown_hull import get_elevation
+from forest3d.io.dem import get_elevation
 from forest3d.schemas.tree import Tree
 from forest3d.schemas.treelist import TreeListDataFrameModel
 
