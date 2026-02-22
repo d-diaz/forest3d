@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import cast
 
 import jax.numpy as jnp
 from jax import Array, lax
@@ -511,7 +512,7 @@ def make_analytic_dsm(
                 dtype=dtype,
             )
 
-    def scan_tree(dsm_flat: Array, tree: _SurfaceLikeParams) -> tuple[Array, Array]:
+    def scan_tree(dsm_flat: Array, tree: object) -> tuple[Array, Array]:
         """Accumulate a single tree's canopy surface into the DSM buffer.
 
         This is the per-tree loop body used by `jax.lax.scan`. It evaluates the
@@ -522,14 +523,16 @@ def make_analytic_dsm(
             dsm_flat (jax.Array): Flattened DSM accumulator of shape `(cs.ny * cs.nx,)`.
                 Entries start at `-inf` and are max-updated in-place (functionally)
                 for each tree.
-            tree (TreeHullParams | CrownSurfaceParams): Single-tree parameters (a
-                single slice of the batched `params` PyTree).
+            tree (object): Single-tree parameters (a single slice of the batched
+                `params` PyTree), expected to be a `TreeHullParams` or
+                `CrownSurfaceParams`.
 
         Returns:
             dsm_flat (jax.Array): Updated flattened DSM accumulator.
             aux (jax.Array): Placeholder scan output (unused).
         """
-        inv = _TreeInvariants.from_tree(tree, dtype=dtype)
+        tree_params = cast(_SurfaceLikeParams, tree)
+        inv = _TreeInvariants.from_tree(tree_params, dtype=dtype)
         win = _WindowGeometry.from_invariants(
             inv=inv,
             raster=raster_geom,
