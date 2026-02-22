@@ -41,6 +41,7 @@ ipykernel = "*"
 mypy = "*"
 pre-commit = "*"
 pytest = "*"
+pytest-benchmark = "*"
 ruff = "*"
 
 [tasks]
@@ -49,4 +50,5 @@ ruff-format-check = "ruff format --check ."
 lint = { depends-on = ["ruff-format-check", "ruff-check"] }
 typecheck = "mypy"
 test = "pytest"
+bench = "pytest benchmarks --benchmark-only"
 ci = { depends-on = ["lint", "typecheck", "test"] }
