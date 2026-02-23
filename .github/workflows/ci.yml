@@ -20,5 +20,7 @@ jobs:
       - name: Install dev environment
         run: pixi install -e dev
 
-      - name: Lint + typecheck + test
+      - name: Lint + typecheck + test + notebooks
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: pixi run -e dev ci

@@ -39,6 +39,7 @@ find-links = [{ url = "https://storage.googleapis.com/jax-releases/jax_cuda_rele
 [feature.dev.dependencies]
 ipykernel = "*"
 mypy = "*"
+nbval = "*"
 pre-commit = "*"
 pytest = "*"
 pytest-benchmark = "*"
@@ -50,5 +51,6 @@ ruff-format-check = "ruff format --check ."
 lint = { depends-on = ["ruff-format-check", "ruff-check"] }
 typecheck = "mypy"
 test = "pytest"
+notebooks = "pytest --nbval-lax --nbval-current-env notebooks"
 bench = "pytest benchmarks --benchmark-only"
-ci = { depends-on = ["lint", "typecheck", "test"] }
+ci = { depends-on = ["lint", "typecheck", "test", "notebooks"] }
