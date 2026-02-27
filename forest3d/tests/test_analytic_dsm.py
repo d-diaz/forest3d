@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from jax import jit
 
-from forest3d.geometry.crown import make_crown_hull_batched
+from forest3d.geometry.evaluators.points import make_crown_hull_batched
 from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
 from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.rasterization.analytic_dsm import DsmPixelLocation, make_analytic_dsm

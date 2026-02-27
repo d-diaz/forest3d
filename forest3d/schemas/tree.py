@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from forest3d.geometry.crown import make_crown_hull
+from forest3d.geometry.evaluators.points import make_crown_hull
 from forest3d.geometry.params import CrownHullParams
 
 

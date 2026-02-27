@@ -3,6 +3,10 @@
 This module provides a JAX-friendly alternative to point-cloud rasterization:
 instead of sampling crown surface points then taking max-z per pixel, we evaluate
 the analytic upper-crown surface height at a representative location per pixel.
+
+Separation of concerns:
+- This module owns raster/window/pixel policy and max-scatter reduction.
+- Crown surface math is delegated to `forest3d.geometry.*` (kernels + `CrownModel`).
 """
 
 from __future__ import annotations
@@ -11,33 +15,18 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 import jax.numpy as jnp
 from jax import Array, lax
-from jax.typing import ArrayLike
 
-from forest3d.geometry.crown import (
-    AzimuthalProfile,
-    CrownAnchors,
-    CrownApex,
-    PeripheralPoints,
-    TreePose,
+from forest3d.geometry.crown import CrownModel
+from forest3d.geometry.evaluators.surface import (
+    upper_surface_z_local,
 )
 from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
+from forest3d.geometry.primitives import AzimuthalProfile
 from forest3d.geospatial.coordinates import CoordinateSystem
-
-_SurfaceLikeParams = CrownHullParams | CrownSurfaceParams
-
-
-class _TreeLike(Protocol):
-    stem_base: ArrayLike
-    top_height: ArrayLike
-    crown_ratio: ArrayLike
-    lean_direction: ArrayLike
-    lean_severity: ArrayLike
-    crown_radii: ArrayLike
-    crown_edge_heights: ArrayLike
 
 
 class DsmPixelLocation(StrEnum):
@@ -48,7 +37,7 @@ class DsmPixelLocation(StrEnum):
 
 
 def make_analytic_dsm(
-    params: _SurfaceLikeParams,
+    params: CrownHullParams | CrownSurfaceParams,
     *,
     cs: CoordinateSystem,
     fill_value: Array | float = jnp.nan,
@@ -98,48 +87,52 @@ def make_analytic_dsm(
     if dsm_pixel_location == DsmPixelLocation.CENTER:
 
         def query_xy_fn(
-            *,
-            inv: _TreeInvariants,
-            win: _WindowGeometry,
+            *, apex_x: Array, apex_y: Array, win: _WindowGeometry
         ) -> tuple[Array, Array]:
+            _ = apex_x, apex_y
             return _query_xy_center(win)
 
     else:
 
         def query_xy_fn(
-            *,
-            inv: _TreeInvariants,
-            win: _WindowGeometry,
+            *, apex_x: Array, apex_y: Array, win: _WindowGeometry
         ) -> tuple[Array, Array]:
             return _query_xy_ray_entry(
-                inv=inv,
+                apex_x=apex_x,
+                apex_y=apex_y,
                 win=win,
                 raster=raster_geom,
                 dtype=dtype,
             )
 
     def scan_tree(dsm_flat: Array, tree: object) -> tuple[Array, Any]:
-        tree_params = cast(_SurfaceLikeParams, tree)
-        inv = _TreeInvariants.from_tree(tree_params, dtype=dtype)
-        win = _WindowGeometry.from_invariants(
-            inv=inv,
+        tree_params = cast(CrownHullParams | CrownSurfaceParams, tree)
+        model = CrownModel.from_params(tree_params, dtype=dtype)
+        apex_x = (model.pose.tx + model.apex.x).astype(dtype)
+        apex_y = (model.pose.ty + model.apex.y).astype(dtype)
+        apex_z = (model.pose.tz + model.apex.z).astype(dtype)
+        win = _WindowGeometry.from_apex_xy(
+            apex_x=apex_x,
+            apex_y=apex_y,
             raster=raster_geom,
             window_di=window_di,
             window_dj=window_dj,
             dtype=dtype,
         )
 
-        query_x, query_y = query_xy_fn(inv=inv, win=win)
-        r, theta = _local_polar(
-            query_x=query_x,
-            query_y=query_y,
-            inv=inv,
-            dtype=dtype,
+        query_x, query_y = query_xy_fn(apex_x=apex_x, apex_y=apex_y, win=win)
+        r, theta = model.local_polar(query_x=query_x, query_y=query_y, dtype=dtype)
+        az = AzimuthalProfile.from_model(
+            model=model, theta=theta, period=period, dtype=dtype
         )
-
-        az = _azimuthal_profile(inv=inv, theta=theta, period=period, dtype=dtype)
-        z_local, inside = _upper_crown_surface_z(r=r, inv=inv, az=az)
-        z_global = z_local + inv.top_tz
+        z_local, inside = upper_surface_z_local(
+            r=r,
+            crown_edge_radius=az.crown_edge_radius,
+            periph_z_local=az.periph_z_local,
+            apex_z_local=model.apex.z,
+            top_shape=az.top_shape,
+        )
+        z_global = z_local + model.pose.tz
 
         dsm_flat = _scatter_max_window(
             dsm_flat=dsm_flat,
@@ -153,7 +146,7 @@ def make_analytic_dsm(
         if enforce_apex:
             dsm_flat = _enforce_apex_height(
                 dsm_flat=dsm_flat,
-                inv=inv,
+                apex_z=apex_z,
                 win=win,
                 ny_i32=ny_i32,
                 nx_i32=nx_i32,
@@ -170,67 +163,6 @@ def make_analytic_dsm(
 
 
 @dataclass(frozen=True)
-class _TreeInvariants:
-    top_tx: Array
-    top_ty: Array
-    top_tz: Array
-    apex_x_local: Array
-    apex_y_local: Array
-    apex_z_local: Array
-    apex_x: Array
-    apex_y: Array
-    apex_z: Array
-    periph_x: Array
-    periph_y: Array
-    periph_z: Array
-    top_shapes: Array
-
-    @staticmethod
-    def from_tree(tree: _SurfaceLikeParams, *, dtype: jnp.dtype) -> _TreeInvariants:
-        pose = TreePose.from_tree(cast(_TreeLike, tree))
-        if isinstance(tree, CrownHullParams):
-            anchors = CrownAnchors.from_hull(tree)
-        else:
-            anchors = CrownAnchors.from_crown_surface_params(tree)
-
-        top_tx, top_ty, top_tz = pose.tx, pose.ty, pose.tz
-
-        apex = CrownApex.from_params(
-            crown_radii=anchors.crown_radii,
-            top_height=jnp.asarray(tree.top_height, dtype=dtype),
-            crown_ratio=jnp.asarray(tree.crown_ratio, dtype=dtype),
-        ).local
-        apex_x_local, apex_y_local, apex_z_local = apex.x, apex.y, apex.z
-        apex_x = (top_tx + apex_x_local).astype(dtype)
-        apex_y = (top_ty + apex_y_local).astype(dtype)
-        apex_z = (top_tz + apex_z_local).astype(dtype)
-
-        periph = PeripheralPoints.from_params(
-            crown_radii=anchors.crown_radii,
-            crown_edge_heights=anchors.crown_edge_heights,
-            top_height=jnp.asarray(tree.top_height, dtype=dtype),
-            crown_ratio=jnp.asarray(tree.crown_ratio, dtype=dtype),
-        )
-        periph_x, periph_y, periph_z = periph.x, periph.y, periph.z
-
-        return _TreeInvariants(
-            top_tx=top_tx,
-            top_ty=top_ty,
-            top_tz=top_tz,
-            apex_x_local=apex_x_local,
-            apex_y_local=apex_y_local,
-            apex_z_local=apex_z_local,
-            apex_x=apex_x,
-            apex_y=apex_y,
-            apex_z=apex_z,
-            periph_x=periph_x,
-            periph_y=periph_y,
-            periph_z=periph_z,
-            top_shapes=anchors.top_shapes,
-        )
-
-
-@dataclass(frozen=True)
 class _WindowGeometry:
     apex_i: Array
     apex_j: Array
@@ -241,16 +173,17 @@ class _WindowGeometry:
     pixel_center_y: Array
 
     @staticmethod
-    def from_invariants(
+    def from_apex_xy(
         *,
-        inv: _TreeInvariants,
+        apex_x: Array,
+        apex_y: Array,
         raster: _RasterGeom,
         window_di: Array,
         window_dj: Array,
         dtype: jnp.dtype,
     ) -> _WindowGeometry:
-        apex_i = jnp.floor((raster.ymax - inv.apex_y) / raster.dy).astype(jnp.int32)
-        apex_j = jnp.floor((inv.apex_x - raster.xmin) / raster.dx).astype(jnp.int32)
+        apex_i = jnp.floor((raster.ymax - apex_y) / raster.dy).astype(jnp.int32)
+        apex_j = jnp.floor((apex_x - raster.xmin) / raster.dx).astype(jnp.int32)
 
         win_i = apex_i + window_di
         win_j = apex_j + window_dj
@@ -292,28 +225,51 @@ class _RasterGeom:
 
 
 def _query_xy_center(win: _WindowGeometry) -> tuple[Array, Array]:
+    """Return pixel-center query coordinates for a window.
+
+    Args:
+        win: Per-tree window geometry with pixel-center coordinates.
+
+    Returns:
+        Tuple `(query_x, query_y)` for each pixel in the local window.
+    """
     return win.pixel_center_x, win.pixel_center_y
 
 
 def _query_xy_ray_entry(
     *,
-    inv: _TreeInvariants,
+    apex_x: Array,
+    apex_y: Array,
     win: _WindowGeometry,
     raster: _RasterGeom,
     dtype: jnp.dtype,
 ) -> tuple[Array, Array]:
+    """Return query coordinates at ray-entry into each pixel cell.
+
+    A ray is traced from the tree apex to each pixel center. The query point is
+    clamped to the first intersection with the pixel bounds.
+
+    Args:
+        inv: Tree invariants for the current tree.
+        win: Window geometry for local raster indices and pixel centers.
+        raster: Global raster geometry and resolution.
+        dtype: Floating dtype for intermediate calculations.
+
+    Returns:
+        Tuple `(query_x, query_y)` with the same shape as the window arrays.
+    """
     pixel_x_min = raster.xmin + win.win_j.astype(dtype) * raster.dx
     pixel_x_max = pixel_x_min + raster.dx
     pixel_y_max = raster.ymax - win.win_i.astype(dtype) * raster.dy
     pixel_y_min = pixel_y_max - raster.dy
 
-    ray_dx = win.pixel_center_x - inv.apex_x
-    ray_dy = win.pixel_center_y - inv.apex_y
+    ray_dx = win.pixel_center_x - apex_x
+    ray_dy = win.pixel_center_y - apex_y
 
-    t_x0 = (pixel_x_min - inv.apex_x) / ray_dx
-    t_x1 = (pixel_x_max - inv.apex_x) / ray_dx
-    t_y0 = (pixel_y_min - inv.apex_y) / ray_dy
-    t_y1 = (pixel_y_max - inv.apex_y) / ray_dy
+    t_x0 = (pixel_x_min - apex_x) / ray_dx
+    t_x1 = (pixel_x_max - apex_x) / ray_dx
+    t_y0 = (pixel_y_min - apex_y) / ray_dy
+    t_y1 = (pixel_y_max - apex_y) / ray_dy
 
     tmin_x = jnp.minimum(t_x0, t_x1)
     tmax_x = jnp.maximum(t_x0, t_x1)
@@ -331,82 +287,9 @@ def _query_xy_ray_entry(
     t_entry = jnp.clip(t_entry, 0.0, 1.0)
     t_entry = jnp.where((ray_dx == 0) & (ray_dy == 0), 0.0, t_entry)
 
-    query_x = inv.apex_x + t_entry * ray_dx
-    query_y = inv.apex_y + t_entry * ray_dy
+    query_x = apex_x + t_entry * ray_dx
+    query_y = apex_y + t_entry * ray_dy
     return query_x, query_y
-
-
-def _local_polar(
-    *,
-    query_x: Array,
-    query_y: Array,
-    inv: _TreeInvariants,
-    dtype: jnp.dtype,
-) -> tuple[Array, Array]:
-    query_x_local = query_x - inv.top_tx
-    query_y_local = query_y - inv.top_ty
-    dx_local = query_x_local - inv.apex_x_local
-    dy_local = query_y_local - inv.apex_y_local
-
-    r = jnp.hypot(dy_local, dx_local)
-    theta = jnp.arctan2(dy_local, dx_local).astype(dtype)
-    return r, theta
-
-
-def _upper_crown_surface_z(
-    *,
-    r: Array,
-    inv: _TreeInvariants,
-    az: AzimuthalProfile,
-) -> tuple[Array, Array]:
-    crown_edge_radius = az.crown_edge_radius
-    periph_z_local = az.periph_z_local
-    apex_z_local = inv.apex_z_local
-    top_shape = az.top_shape
-
-    crown_edge_radius_safe = jnp.where(crown_edge_radius == 0, 1.0, crown_edge_radius)
-    top_shape_safe = jnp.where(top_shape == 0, 1.0, top_shape)
-
-    r_frac = (r / crown_edge_radius_safe) ** top_shape_safe
-    inner = jnp.maximum(1.0 - r_frac, 0.0)
-    u = inner ** (1.0 / top_shape_safe)
-
-    z_local = periph_z_local + (apex_z_local - periph_z_local) * u
-    inside = (crown_edge_radius > 0) & (r <= crown_edge_radius)
-    return z_local, inside
-
-
-def _azimuthal_profile(
-    *,
-    inv: _TreeInvariants,
-    theta: Array,
-    period: Array,
-    dtype: jnp.dtype,
-) -> AzimuthalProfile:
-    """Compute theta-dependent surface profile terms for analytic DSM."""
-    periph_drop_from_apex = inv.apex_z_local - inv.periph_z
-    periph_radius_from_apex = jnp.hypot(
-        inv.periph_y - inv.apex_y_local, inv.periph_x - inv.apex_x_local
-    )
-    periph_theta = jnp.arctan2(
-        inv.periph_y - inv.apex_y_local, inv.periph_x - inv.apex_x_local
-    ).astype(dtype)
-
-    crown_edge_radius = jnp.interp(
-        theta, periph_theta, periph_radius_from_apex.astype(dtype), period=period
-    )
-    periph_drop = jnp.interp(
-        theta, periph_theta, periph_drop_from_apex.astype(dtype), period=period
-    )
-    periph_z_local = inv.apex_z_local - periph_drop
-    top_shape = jnp.interp(
-        theta, periph_theta, inv.top_shapes.astype(dtype), period=period
-    )
-    return AzimuthalProfile(
-        crown_edge_radius=crown_edge_radius,
-        periph_z_local=periph_z_local,
-        top_shape=top_shape,
-    )
 
 
 def _scatter_max_window(
@@ -418,6 +301,19 @@ def _scatter_max_window(
     nx_i32: Array,
     neg_inf: Array,
 ) -> Array:
+    """Scatter local window values into flattened DSM with max reduction.
+
+    Args:
+        dsm_flat: Flattened DSM accumulator.
+        win: Window geometry with flattened index components.
+        z_global: Candidate z values in global space for the window.
+        inside: Mask indicating valid crown-support points.
+        nx_i32: Raster width used for flattening `(i, j)` indices.
+        neg_inf: Sentinel value used for masked-out cells.
+
+    Returns:
+        Updated flattened DSM where window cells are max-reduced.
+    """
     z_safe = jnp.where(win.in_raster & inside, z_global, neg_inf)
     flat_idx = win.win_i * nx_i32 + win.win_j
     flat_idx_safe = jnp.where(win.in_raster, flat_idx, jnp.int32(0)).reshape((-1,))
@@ -428,12 +324,25 @@ def _scatter_max_window(
 def _enforce_apex_height(
     *,
     dsm_flat: Array,
-    inv: _TreeInvariants,
+    apex_z: Array,
     win: _WindowGeometry,
     ny_i32: Array,
     nx_i32: Array,
     neg_inf: Array,
 ) -> Array:
+    """Ensure the apex pixel reaches at least the tree apex elevation.
+
+    Args:
+        dsm_flat: Flattened DSM accumulator.
+        inv: Tree invariants containing apex global z.
+        win: Window geometry containing apex raster indices.
+        ny_i32: Raster height for bounds checking.
+        nx_i32: Raster width for bounds checking and flattening.
+        neg_inf: Sentinel value when apex is out of bounds.
+
+    Returns:
+        Updated flattened DSM after max-updating the apex pixel.
+    """
     apex_in_bounds = (
         (win.apex_i >= 0)
         & (win.apex_i < ny_i32)
@@ -442,5 +351,5 @@ def _enforce_apex_height(
     )
     flat_apex = win.apex_i * nx_i32 + win.apex_j
     flat_apex_safe = jnp.where(apex_in_bounds, flat_apex, jnp.int32(0))
-    z_apex_safe = jnp.where(apex_in_bounds, inv.apex_z, neg_inf)
+    z_apex_safe = jnp.where(apex_in_bounds, apex_z, neg_inf)
     return dsm_flat.at[flat_apex_safe].max(z_apex_safe)

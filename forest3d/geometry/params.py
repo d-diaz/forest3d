@@ -1,3 +1,21 @@
+"""Crown parameter containers (NumPyro-/JAX-facing inputs).
+
+These dataclasses are the *input layer* for crown geometry. They are designed to be
+PyTree-friendly and easy to batch (e.g., via `vmap`) so that simulation/optimization
+workflows (NumPyro) can sample parameter sets and feed them into geometry/raster
+evaluators.
+
+Conventions:
+- Fields are array-like (`ArrayLike`) and are normalized with `jnp.asarray(...)` at
+  consumption sites (constructors/evaluators), not eagerly here.
+- \"Batched\" means each field carries a leading batch dimension `B` consistently.
+
+Construction intent:
+- Prefer `...from_hull(...)` helpers only when the resulting object is a *strictly
+  smaller* view of an existing parameter set (e.g., dropping lower-crown shapes).
+- Derived geometry belongs in `forest3d.geometry.crown.CrownModel`, not here.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

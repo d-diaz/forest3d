@@ -1,8 +1,10 @@
 import numpy as np
 from jax import jit
 
-from forest3d.geometry.crown import CrownApex, CrownBase, TreePose, make_crown_hull
+from forest3d.geometry.crown import _hull_apex_and_base_local
+from forest3d.geometry.evaluators.points import make_crown_hull
 from forest3d.geometry.params import CrownHullParams
+from forest3d.geometry.primitives import Point3D, TreePose
 from forest3d.schemas.tree import Tree
 
 
@@ -152,7 +154,7 @@ def test_treetop_stem_z_isolation():
 
 
 def test_hull_apex_and_base_consistent():
-    """Tree.crown() has the same apex and base as CrownApex/CrownBase."""
+    """Tree.crown() has the same apex and base as crown local geometry helpers."""
     tree = Tree(
         species="Douglas-fir",
         dbh=8.5,
@@ -176,16 +178,13 @@ def test_hull_apex_and_base_consistent():
     )
 
     pose = TreePose.from_tree(params)
-    apex_local = CrownApex.from_params(
+    apex_arr, base_arr = _hull_apex_and_base_local(
         crown_radii=params.crown_radii,
         top_height=params.top_height,
         crown_ratio=params.crown_ratio,
-    ).local
-    base_local = CrownBase.from_params(
-        crown_radii=params.crown_radii,
-        top_height=params.top_height,
-        crown_ratio=params.crown_ratio,
-    ).local
+    )
+    apex_local = Point3D.from_array(apex_arr, axis=0)
+    base_local = Point3D.from_array(base_arr, axis=0)
     apex1 = np.asarray(
         (apex_local.as_array(axis=0) + pose.t_global.as_array(axis=0)).reshape((3,))
     )
@@ -221,12 +220,14 @@ def test_hull_apex_y_offset_depends_on_northsouth_center_not_eastwest():
     p1 = CrownHullParams(crown_radii=np.asarray((1.0, 2.0, 3.0, 2.0)), **common)
     p2 = CrownHullParams(crown_radii=np.asarray((5.0, 2.0, 1.0, 2.0)), **common)
 
-    a1 = CrownApex.from_params(
+    a1, _ = _hull_apex_and_base_local(
         crown_radii=p1.crown_radii, top_height=p1.top_height, crown_ratio=p1.crown_ratio
-    ).local
-    a2 = CrownApex.from_params(
+    )
+    a2, _ = _hull_apex_and_base_local(
         crown_radii=p2.crown_radii, top_height=p2.top_height, crown_ratio=p2.crown_ratio
-    ).local
+    )
+    a1 = Point3D.from_array(a1, axis=0)
+    a2 = Point3D.from_array(a2, axis=0)
 
     assert np.allclose(np.asarray(a1.y), 0.0)
     assert np.allclose(np.asarray(a2.y), 0.0)

@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from jax import Array
 
-from forest3d.geometry.crown import TreePose
 from forest3d.geometry.params import CrownHullParams
+from forest3d.geometry.primitives import TreePose
 
 
 def test_treetop_getter_single_point_result_format():
