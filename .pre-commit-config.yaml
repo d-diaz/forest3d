@@ -15,5 +15,4 @@ repos:
         name: mypy (pixi dev)
         entry: pixi run -e dev mypy
         language: system
-        pass_filenames: false
         types: [python]
