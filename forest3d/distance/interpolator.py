@@ -31,7 +31,7 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from forest3d.distance import DistanceField
+from forest3d.distance.field import DistanceField
 
 
 def _as_1d_points(name: str, p: ArrayLike) -> Array:
@@ -61,16 +61,27 @@ def _assert_uniform_increasing(name: str, p: Array) -> tuple[Array, Array]:
 class VoxelGridInterpolator:
     """Trilinear interpolator for uniform 3D grids.
 
-    This interpolator is designed for **uniform** voxel grids, storing a compact
+    This interpolator is designed for uniform voxel grids, storing a compact
     representation of the grid (origin + spacing + sizes) rather than the full
     `x/y/z` vectors.
 
+    It is designed as a drop-in replacement for SciPy's `RegularGridInterpolator`
+    for the **3D, linear** case on **uniformly spaced** grids, and implemented as
+    a JAX pytree so that it can be utilized inside `jax.jit`-compiled functions.
+
+    NOTE: `dx`, `dy`, and `dz` represent the resolution of the grid, which also
+    indicates the finest precision that can be represented during interpolation.
+    For example, query points within a distance of `dz` from a surface will be
+    considered to be on the surface. These step-sizes enforce a uniform grid,
+    but are not required to all be the same. The most commonly anticipated use
+    case would involve `dx == dy`, but for `dz` to be tunable based on the
+    sensitivity or precision of estimates of the surface used for evaluation.
+
     Args:
-        points: Tuple/list `(x, y, z)` of 1D coordinate vectors.
-            - Each vector must be **1D**, **strictly increasing**, and **uniformly
-              spaced** (constant `dx`, `dy`, `dz`).
-        values: Grid values with shape `(len(x), len(y), len(z))`, i.e. axis order is
-            `(x_index, y_index, z_index)`.
+        grid_coordinates (Sequence[ArrayLike]): `(x, y, z)` coordinates for
+            grid cell centers in uniform increasing order along each axis.
+        values (ArrayLike): Values associated with each grid cell with shape
+            `(len(x), len(y), len(z))`.
 
     Attributes:
         x0, y0, z0: Coordinate values at index 0 for each axis (i.e. `x[0]`, `y[0]`,
@@ -117,14 +128,14 @@ class VoxelGridInterpolator:
 
     def __init__(
         self,
-        points: Sequence[ArrayLike],
+        grid_coordinates: Sequence[ArrayLike],
         values: ArrayLike,
-    ):
-        if len(points) != 3:
-            raise ValueError("points must be a 3-tuple (x, y, z).")
-        x = _as_1d_points("x", points[0])
-        y = _as_1d_points("y", points[1])
-        z = _as_1d_points("z", points[2])
+    ) -> None:
+        if len(grid_coordinates) != 3:
+            raise ValueError("grid_coordinates must be a 3-tuple (x, y, z).")
+        x = _as_1d_points("x", grid_coordinates[0])
+        y = _as_1d_points("y", grid_coordinates[1])
+        z = _as_1d_points("z", grid_coordinates[2])
 
         x0, dx = _assert_uniform_increasing("x", x)
         y0, dy = _assert_uniform_increasing("y", y)
@@ -215,7 +226,7 @@ class VoxelGridInterpolator:
     @staticmethod
     def from_distance_field(distance_field: DistanceField) -> VoxelGridInterpolator:
         return VoxelGridInterpolator(
-            points=(distance_field.x, distance_field.y, distance_field.z),
+            grid_coordinates=(distance_field.x, distance_field.y, distance_field.z),
             values=distance_field.values,
         )
 
@@ -223,11 +234,11 @@ class VoxelGridInterpolator:
         """Evaluate interpolated values at query points `xi`.
 
         Args:
-            xi: Array-like of shape (..., 3) containing (x, y, z) query locations.
+            xi: Array-like of shape (N, 3) containing N (x, y, z) query locations.
 
         Returns:
-            Array of shape (...) containing interpolated values with distance-style
-            out-of-bounds handling.
+            Array of shape (N) containing interpolated values at N query points with
+            distance-style out-of-bounds handling.
         """
         pts = jnp.asarray(xi)
         if pts.ndim < 1 or pts.shape[-1] != 3:
