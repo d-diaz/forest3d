@@ -81,6 +81,55 @@ def rotate_xy(*, x: ArrayLike, y: ArrayLike, theta: ArrayLike) -> tuple[Array, A
     return cos_theta * x - sin_theta * y, sin_theta * x + cos_theta * y
 
 
+def stem_xy_world(
+    *,
+    center_x: ArrayLike,
+    center_y: ArrayLike,
+    local_x: ArrayLike,
+    local_y: ArrayLike,
+    offset_x: ArrayLike,
+    offset_y: ArrayLike,
+    theta: ArrayLike,
+) -> tuple[Array, Array]:
+    """Compute world-space stem XY from plot center, local offsets, and rotation.
+
+    Builds per-tree layout vectors `u = local + offset`, rotates them by
+    `theta` about the origin, then translates by the plot center:
+
+        u_x = local_x + offset_x
+        u_y = local_y + offset_y
+        stem_x = center_x + rotate_xy(u_x, u_y, theta).x
+        stem_y = center_y + rotate_xy(u_x, u_y, theta).y
+
+    When `theta = 0` this reduces to `center + local + offset`, matching
+    the existing formula in `distance_field_energy`.
+
+    Args:
+        center_x: Plot-center x (scalar or broadcastable).
+        center_y: Plot-center y (scalar or broadcastable).
+        local_x: Per-tree local x offset from plot center, shape (B,).
+        local_y: Per-tree local y offset from plot center, shape (B,).
+        offset_x: Per-tree perturbation x (latent), shape (B,).
+        offset_y: Per-tree perturbation y (latent), shape (B,).
+        theta: Global rotation angle in radians (scalar or broadcastable).
+
+    Returns:
+        stem_x, stem_y (Arrays) of world-space stem coordinates.
+
+    Note:
+        Internal angle convention: 0 rad = +x (east), pi/2 = +y (north), CCW
+        positive.  This is the same frame used by `rotate_xy` and consistent
+        with `BearingPrior.from_degrees` in `forest3d.simulation.priors`
+        (which maps FIA degrees-from-north via `deg2rad(90 - bearing_deg)`).
+        For grid search, theta represents a global plot rotation about the
+        plot center in this frame.
+    """
+    u_x = jnp.asarray(local_x) + jnp.asarray(offset_x)
+    u_y = jnp.asarray(local_y) + jnp.asarray(offset_y)
+    rot_x, rot_y = rotate_xy(x=u_x, y=u_y, theta=theta)
+    return jnp.asarray(center_x) + rot_x, jnp.asarray(center_y) + rot_y
+
+
 def polar_to_xy(
     *,
     radii: ArrayLike,

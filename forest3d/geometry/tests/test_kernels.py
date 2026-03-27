@@ -1,7 +1,11 @@
 import jax.numpy as jnp
 import pytest
 
-from forest3d.geometry.kernels import polar_to_xy, rotate_xy
+from forest3d.geometry.kernels import polar_to_xy, rotate_xy, stem_xy_world
+
+# ---------------------------------------------------------------------------
+# rotate_xy
+# ---------------------------------------------------------------------------
 
 
 def test_rotate_xy_identity():
@@ -41,6 +45,71 @@ def test_rotate_xy_batched_theta_broadcasts():
     expected_xr, expected_yr = jnp.array([1.0, 0.0, -1.0]), jnp.array([0.0, 1.0, 0.0])
     assert jnp.allclose(xr, expected_xr, atol=1e-6)
     assert jnp.allclose(yr, expected_yr, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# stem_xy_world
+# ---------------------------------------------------------------------------
+
+
+def test_stem_xy_world_theta_zero_matches_add():
+    """theta=0 reduces to center + local + offset (no rotation)."""
+    cx, cy = 100.0, 200.0
+    lx = jnp.array([1.0, -2.0, 0.5])
+    ly = jnp.array([3.0, 0.0, -1.0])
+    ox = jnp.array([0.1, 0.2, 0.3])
+    oy = jnp.array([-0.1, 0.4, 0.0])
+    sx, sy = stem_xy_world(
+        center_x=cx,
+        center_y=cy,
+        local_x=lx,
+        local_y=ly,
+        offset_x=ox,
+        offset_y=oy,
+        theta=0.0,
+    )
+    expected_sx, expected_sy = cx + lx + ox, cy + ly + oy
+    assert jnp.allclose(sx, expected_sx, atol=1e-6)
+    assert jnp.allclose(sy, expected_sy, atol=1e-6)
+
+
+def test_stem_xy_world_theta_pi_half():
+    """Single tree at (1, 0) local+offset rotated 90 deg CCW -> (0, 1)."""
+    sx, sy = stem_xy_world(
+        center_x=10.0,
+        center_y=20.0,
+        local_x=1.0,
+        local_y=0.0,
+        offset_x=0.0,
+        offset_y=0.0,
+        theta=jnp.pi / 2,
+    )
+    expected_sx, expected_sy = 10.0, 21.0
+    assert jnp.allclose(sx, expected_sx, atol=1e-6)
+    assert jnp.allclose(sy, expected_sy, atol=1e-6)
+
+
+def test_stem_xy_world_batched():
+    """Multiple trees with scalar theta."""
+    lx = jnp.array([1.0, 0.0])
+    ly = jnp.array([0.0, 1.0])
+    sx, sy = stem_xy_world(
+        center_x=0.0,
+        center_y=0.0,
+        local_x=lx,
+        local_y=ly,
+        offset_x=0.0,
+        offset_y=0.0,
+        theta=jnp.pi,
+    )
+    expected_sx, expected_sy = jnp.array([-1.0, 0.0]), jnp.array([0.0, -1.0])
+    assert jnp.allclose(sx, expected_sx, atol=1e-6)
+    assert jnp.allclose(sy, expected_sy, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# polar_to_xy
+# ---------------------------------------------------------------------------
 
 
 def test_polar_to_xy_basic():
