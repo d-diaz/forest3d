@@ -43,7 +43,7 @@ def sample_hull_points(
     anchors = model.anchors
     periph = model.peripheral
 
-    grid_thetas, grid_zs = theta_z_grid(
+    grid_theta, grid_z = theta_z_grid(
         num_theta=num_theta,
         num_z=num_z,
         base_z=model.base.z,
@@ -51,96 +51,89 @@ def sample_hull_points(
     )
 
     top_periph = peripheral_relative(
-        periph=periph, ref=model.apex, dtype=grid_thetas.dtype
+        periph=periph, ref=model.apex, dtype=grid_theta.dtype
     )
-    period = jnp.asarray(2.0 * jnp.pi, dtype=grid_thetas.dtype)
+    period = jnp.asarray(2.0 * jnp.pi, dtype=grid_theta.dtype)
     apex_periph_line_radii = interp_periodic(
-        theta=grid_thetas,
+        theta=grid_theta,
         key_theta=top_periph.thetas,
         values=top_periph.radii_xy,
         period=period,
     )
     periph_height_interp = interp_periodic(
-        theta=grid_thetas,
+        theta=grid_theta,
         key_theta=top_periph.thetas,
         values=top_periph.drop_from_ref_z,
         period=period,
     )
     top_shapes_interp = interp_periodic(
-        theta=grid_thetas,
+        theta=grid_theta,
         key_theta=top_periph.thetas,
         values=anchors.top_shapes,
         period=period,
     )
 
-    cos_grid_thetas = jnp.cos(grid_thetas)
-    sin_grid_thetas = jnp.sin(grid_thetas)
-    periph_line_xs, periph_line_ys = polar_to_xy(
+    periph_line_x, periph_line_y = polar_to_xy(
         radii=apex_periph_line_radii,
-        cos_theta=cos_grid_thetas,
-        sin_theta=sin_grid_thetas,
+        theta=grid_theta,
         center_x=model.apex.x,
         center_y=model.apex.y,
     )
-    periph_line_zs = model.apex.z - periph_height_interp
+    periph_line_z = model.apex.z - periph_height_interp
 
     top_hull_radii = _hull_radii_from_profile(
-        delta_z=jnp.maximum(grid_zs - periph_line_zs, 0.0),
-        denom_z=model.apex.z - periph_line_zs,
+        delta_z=jnp.maximum(grid_z - periph_line_z, 0.0),
+        denom_z=model.apex.z - periph_line_z,
         edge_radii=apex_periph_line_radii,
         shape=top_shapes_interp,
     )
 
     base_periph = peripheral_relative(
-        periph=periph, ref=model.base, dtype=grid_thetas.dtype
+        periph=periph, ref=model.base, dtype=grid_theta.dtype
     )
-    bottom_periph_line_thetas = jnp.arctan2(
-        periph_line_ys - model.base.y,
-        periph_line_xs - model.base.x,
+    bottom_periph_line_theta = jnp.arctan2(
+        periph_line_y - model.base.y,
+        periph_line_x - model.base.x,
     )
     base_periph_line_radii = jnp.hypot(
-        periph_line_xs - model.base.x,
-        periph_line_ys - model.base.y,
+        periph_line_x - model.base.x,
+        periph_line_y - model.base.y,
     )
     bottom_shapes_interp = interp_periodic(
-        theta=bottom_periph_line_thetas,
+        theta=bottom_periph_line_theta,
         key_theta=base_periph.thetas,
         values=anchors.bottom_shapes,
         period=period,
     )
 
     bottom_hull_radii = _hull_radii_from_profile(
-        delta_z=jnp.maximum(periph_line_zs - grid_zs, 0.0),
-        denom_z=periph_line_zs - model.base.z,
+        delta_z=jnp.maximum(periph_line_z - grid_z, 0.0),
+        denom_z=periph_line_z - model.base.z,
         edge_radii=base_periph_line_radii,
         shape=bottom_shapes_interp,
     )
 
-    grid_top = grid_zs >= periph_line_zs
+    grid_top = grid_z >= periph_line_z
     hull_radii = jnp.where(grid_top, top_hull_radii, bottom_hull_radii)
-    cos_bottom_thetas = jnp.cos(bottom_periph_line_thetas)
-    sin_bottom_thetas = jnp.sin(bottom_periph_line_thetas)
-    top_grid_xs, top_grid_ys = polar_to_xy(
+    top_grid_x, top_grid_y = polar_to_xy(
         radii=hull_radii,
-        cos_theta=cos_grid_thetas,
-        sin_theta=sin_grid_thetas,
+        theta=grid_theta,
         center_x=model.apex.x,
         center_y=model.apex.y,
     )
-    bottom_grid_xs, bottom_grid_ys = polar_to_xy(
+    bottom_grid_x, bottom_grid_y = polar_to_xy(
         radii=hull_radii,
-        cos_theta=cos_bottom_thetas,
-        sin_theta=sin_bottom_thetas,
+        theta=bottom_periph_line_theta,
         center_x=model.base.x,
         center_y=model.base.y,
     )
-    grid_xs = jnp.where(grid_top, top_grid_xs, bottom_grid_xs)
-    grid_ys = jnp.where(grid_top, top_grid_ys, bottom_grid_ys)
+    grid_x = jnp.where(grid_top, top_grid_x, bottom_grid_x)
+    grid_y = jnp.where(grid_top, top_grid_y, bottom_grid_y)
 
-    crown_xs = grid_xs + model.pose.tx
-    crown_ys = grid_ys + model.pose.ty
-    crown_zs = grid_zs + model.pose.tz
-    return jnp.column_stack((crown_xs.ravel(), crown_ys.ravel(), crown_zs.ravel()))
+    crown_x = grid_x + model.pose.tx
+    crown_y = grid_y + model.pose.ty
+    crown_z = grid_z + model.pose.tz
+    return jnp.column_stack((crown_x.ravel(), crown_y.ravel(), crown_z.ravel()))
 
 
 def make_crown_hull(

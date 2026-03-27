@@ -8,16 +8,13 @@ This module hosts small, JAX-friendly helper kernels that are:
 Non-goals:
 - No crown model or primitive assembly.
 - No raster/window/pixel policy logic.
-
-API note:
-- Only `interp_periodic` is intended as a stable public helper.
-- Underscored helpers are internal implementation details for evaluator modules.
 """
 
 from __future__ import annotations
 
 import jax.numpy as jnp
 from jax import Array
+from jax.typing import ArrayLike
 
 
 def interp_periodic(
@@ -30,13 +27,13 @@ def interp_periodic(
     """Periodic 1-D interpolation over an angular domain.
 
     Args:
-        theta: Query coordinates (often azimuth angles in radians).
-        key_theta: Source coordinates for known samples.
-        values: Sample values aligned with `key_theta`.
-        period: Interpolation period (typically `2*pi`).
+        theta (Array): Query coordinates (often azimuth angles in radians).
+        key_theta (Array): Source coordinates for known samples.
+        values (Array): Sample values aligned with `key_theta`.
+        period (Array): Interpolation period (typically `2*pi`).
 
     Returns:
-        Interpolated values at `theta`.
+        Interpolated values at `theta` (Array).
     """
     return jnp.interp(theta, key_theta, values, period=period)
 
@@ -44,41 +41,68 @@ def interp_periodic(
 def theta_z_grid(
     *, num_theta: int, num_z: int, base_z: Array, apex_z: Array
 ) -> tuple[Array, Array]:
-    """Build meshgrid arrays for `(theta, z)` sampling.
+    """Build meshgrid arrays for (theta, z) sampling.
 
     Args:
-        num_theta: Number of azimuth samples.
-        num_z: Number of vertical samples.
-        base_z: Lower z bound.
-        apex_z: Upper z bound.
+        num_theta (int): Number of azimuth samples.
+        num_z (int): Number of vertical samples.
+        base_z (Array): Lower z bound.
+        apex_z (Array): Upper z bound.
 
     Returns:
-        Tuple `(grid_thetas, grid_zs)` with shape `(num_z, num_theta)`.
+        grid_theta, grid_z (Arrays) with shape (num_z, num_theta)
     """
-    thetas = jnp.linspace(0.0, 2.0 * jnp.pi, int(num_theta))
-    zs = jnp.linspace(base_z, apex_z, int(num_z))
-    grid_thetas, grid_zs = jnp.meshgrid(thetas, zs)
-    return grid_thetas, grid_zs
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, int(num_theta))
+    z = jnp.linspace(base_z, apex_z, int(num_z))
+    grid_theta, grid_z = jnp.meshgrid(theta, z)
+    return grid_theta, grid_z
+
+
+def rotate_xy(*, x: ArrayLike, y: ArrayLike, theta: ArrayLike) -> tuple[Array, Array]:
+    """Rotate 2D coordinates counterclockwise about the origin (+z out).
+
+    Standard right-handed rotation in map/plan view:
+        x' = cos(θ) x - sin(θ) y
+        y' = sin(θ) x + cos(θ) y
+
+    Args:
+        x: X coordinates; any shape broadcastable with *y* and *theta*.
+        y: Y coordinates; same broadcast contract as *x*.
+        theta: Rotation angle in radians (scalar or broadcastable).
+
+    Returns:
+        x', y' (Arrays) of rotated coordinates.
+    """
+    x = jnp.asarray(x)
+    y = jnp.asarray(y)
+    theta = jnp.asarray(theta)
+    cos_theta = jnp.cos(theta)
+    sin_theta = jnp.sin(theta)
+    return cos_theta * x - sin_theta * y, sin_theta * x + cos_theta * y
 
 
 def polar_to_xy(
     *,
-    radii: Array,
-    cos_theta: Array,
-    sin_theta: Array,
-    center_x: Array,
-    center_y: Array,
+    radii: ArrayLike,
+    theta: ArrayLike,
+    center_x: ArrayLike,
+    center_y: ArrayLike,
 ) -> tuple[Array, Array]:
-    """Convert polar components to cartesian coordinates about a center.
+    """Convert polar coordinates to cartesian about a center.
 
     Args:
         radii: Radial distances.
-        cos_theta: Cosine of azimuth angles.
-        sin_theta: Sine of azimuth angles.
+        theta: Azimuth angles in radians.
         center_x: Cartesian center x.
         center_y: Cartesian center y.
 
     Returns:
-        Tuple `(x, y)` coordinates.
+        x, y (Arrays) of cartesian coordinates.
     """
+    theta = jnp.asarray(theta)
+    radii = jnp.asarray(radii)
+    center_x = jnp.asarray(center_x)
+    center_y = jnp.asarray(center_y)
+    cos_theta = jnp.cos(theta)
+    sin_theta = jnp.sin(theta)
     return radii * cos_theta + center_x, radii * sin_theta + center_y
