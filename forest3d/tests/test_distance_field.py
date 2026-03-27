@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forest3d.distance.field import (
-    distance_field_from_surface,
+    DistanceField,
     voxel_centers_from_coordinate_system,
 )
 from forest3d.geospatial.coordinates import CoordinateSystem
@@ -23,7 +23,7 @@ def test_distance_field_surface_shapes_and_monotonic_axes():
     )
     dsm = np.zeros((cs.ny, cs.nx), dtype=np.float32)
 
-    df = distance_field_from_surface(dsm, cs=cs)
+    df = DistanceField.from_surface(dsm, cs=cs)
 
     assert df.values.shape == (cs.nx, cs.ny, cs.nz)
     assert df.x.shape == (cs.nx,)
@@ -53,16 +53,16 @@ def test_distance_field_surface_z_clamps_to_bounds():
 
     surface_hi = np.full((cs.ny, cs.nx), 999.0, dtype=np.float32)
     with pytest.raises(ValueError, match=msg):
-        distance_field_from_surface(surface_hi, cs=cs)
+        DistanceField.from_surface(surface_hi, cs=cs)
 
     surface_lo = np.full((cs.ny, cs.nx), -999.0, dtype=np.float32)
     with pytest.raises(ValueError, match=msg):
-        distance_field_from_surface(surface_lo, cs=cs)
+        DistanceField.from_surface(surface_lo, cs=cs)
 
     # Exactly at the max edge is also out-of-bounds (half-open).
     surface_eq_max = np.full((cs.ny, cs.nx), float(cs.zmax), dtype=np.float32)
     with pytest.raises(ValueError, match=msg):
-        distance_field_from_surface(surface_eq_max, cs=cs)
+        DistanceField.from_surface(surface_eq_max, cs=cs)
 
 
 def test_distance_field_surface_y_orientation_matches_scipy_axes():
@@ -82,7 +82,7 @@ def test_distance_field_surface_y_orientation_matches_scipy_axes():
     # Top row (north, higher y) set to top layer; bottom row (south) set to bottom.
     # Raster indexing: row 0 is north/high y, row 1 is south/low y.
     surface = np.array([[1.5], [0.5]], dtype=np.float32)  # shape (ny=2, nx=1)
-    df = distance_field_from_surface(surface, cs=cs)
+    df = DistanceField.from_surface(surface, cs=cs)
 
     # SciPy-style y-axis is ascending (south->north), so y index 0 corresponds to
     # raster row 1 (south), and y index 1 corresponds to raster row 0 (north).
@@ -130,7 +130,7 @@ def test_distance_field_surface_rejects_non_finite_values():
     surface = np.zeros((cs.ny, cs.nx), dtype=np.float32)
     surface[0, 0] = np.nan
     with pytest.raises(ValueError, match=r"non-finite"):
-        distance_field_from_surface(surface, cs=cs)
+        DistanceField.from_surface(surface, cs=cs)
 
 
 def test_distance_field_surface_rejects_shape_mismatch_with_message():
@@ -148,4 +148,4 @@ def test_distance_field_surface_rejects_shape_mismatch_with_message():
     )
     bad = np.zeros((cs.ny + 1, cs.nx), dtype=np.float32)
     with pytest.raises(ValueError, match=r"surface must have shape"):
-        distance_field_from_surface(bad, cs=cs)
+        DistanceField.from_surface(bad, cs=cs)
