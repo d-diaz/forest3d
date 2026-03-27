@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 
+import pdal
 import pytest
 
 from forest3d.io.lidar.pipeline import (
@@ -41,8 +42,8 @@ class FakePipeline:
         self.execute_calls += 1
 
 
-@pytest.fixture(autouse=True)
-def patch_pdal_stage(monkeypatch):
+@pytest.fixture
+def patch_pdal_stage(monkeypatch) -> None:
     monkeypatch.setattr("forest3d.io.lidar.pipeline.pdal.Stage", FakeStage)
 
 
@@ -59,6 +60,7 @@ def _stats() -> FakeStage:
     return FakeStage("filters.stats", count="Classification")
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_add_is_immutable():
     pipeline = LidarPipeline()
     stage_a = FakeStage("filters.range", limits="Z[0:10]")
@@ -79,6 +81,7 @@ def test_lidar_pipeline_stores_processing_stages():
     assert pipeline.stages == stages
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_to_json_and_hash_are_stable_and_order_sensitive():
     stage_a = FakeStage("filters.range", limits="Z[0:10]")
     stage_b = FakeStage("filters.crop", bounds="([0,1],[2,3])")
@@ -95,6 +98,7 @@ def test_lidar_pipeline_to_json_and_hash_are_stable_and_order_sensitive():
     assert pipeline_one.pipeline_hash != reordered.pipeline_hash
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_to_json_and_hash_support_disabling_stats():
     pipeline = LidarPipeline(
         stages=(FakeStage("filters.range", limits="Z[0:10]"),),
@@ -112,6 +116,7 @@ def test_lidar_pipeline_to_json_and_hash_support_disabling_stats():
     )
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_validate_delegates_to_module_helper(monkeypatch):
     pipeline = LidarPipeline(stats=_stats()).add(
         FakeStage("filters.range", limits="Z[0:10]")
@@ -126,6 +131,7 @@ def test_lidar_pipeline_validate_delegates_to_module_helper(monkeypatch):
     assert pipeline.validate(reader=FakeStage("readers.ept")) is expected
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_add_rejects_reader_and_writer_stages():
     with pytest.raises(
         ValueError, match="Processing stages cannot be PDAL readers or writers"
@@ -138,6 +144,7 @@ def test_lidar_pipeline_add_rejects_reader_and_writer_stages():
         LidarPipeline().add(FakeStage("writers.las"))
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_add_replaces_stats_stage_with_warning():
     custom_stats = FakeStage("filters.stats", count="ReturnNumber")
 
@@ -153,6 +160,7 @@ def test_lidar_pipeline_add_replaces_stats_stage_with_warning():
     ]
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_run_executes_in_reader_stats_writer_order(monkeypatch):
     pipeline = LidarPipeline(stats=_stats()).add(
         FakeStage("filters.range", limits="Z[0:10]")
@@ -176,6 +184,7 @@ def test_lidar_pipeline_run_executes_in_reader_stats_writer_order(monkeypatch):
     ]
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_validate_uses_stage_json_with_default_stats(monkeypatch):
     pipeline = LidarPipeline(stats=_stats()).add(
         FakeStage("filters.range", limits="Z[0:10]")
@@ -207,6 +216,7 @@ def test_lidar_pipeline_validate_uses_stage_json_with_default_stats(monkeypatch)
     ]
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_validate_allows_disabling_default_stats(monkeypatch):
     pipeline = LidarPipeline(
         stages=(FakeStage("filters.range", limits="Z[0:10]"),),
@@ -237,6 +247,7 @@ def test_lidar_pipeline_validate_allows_disabling_default_stats(monkeypatch):
     ]
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_run_allows_none_writer(monkeypatch):
     pipeline = LidarPipeline(stats=_stats()).add(
         FakeStage("filters.range", limits="Z[0:10]")
@@ -267,6 +278,7 @@ def test_lidar_pipeline_run_raises_for_empty_pipeline_execution():
         pipeline.run(reader=[], writer=None)
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_lidar_pipeline_run_raises_if_validation_fails(monkeypatch):
     pipeline = LidarPipeline(stats=_stats()).add(
         FakeStage("filters.range", limits="Z[0:10]")
@@ -291,6 +303,7 @@ def test_lidar_pipeline_run_raises_if_validation_fails(monkeypatch):
         )
 
 
+@pytest.mark.usefixtures("patch_pdal_stage")
 def test_validate_pipeline_shells_out_over_stdin(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -319,3 +332,42 @@ def test_validate_pipeline_shells_out_over_stdin(monkeypatch):
     assert captured["check"] is False
     assert captured["capture_output"] is True
     assert captured["text"] is True
+
+
+### PDAL integration tests ###
+# These tests should not use the monkeypatch fixture. They rely upon real PDAL stages,
+# but may fail if the PDAL API changes or if PDAL is not configured correctly in the
+# testing environment.
+def test_validate_pipeline_succeeds_with_real_pdal_stages():
+    """Test that validate_pipeline succeeds with real PDAL stages.
+
+    Relies upon pdal.Reader.faux, pdal.Writer.null being available.
+    """
+    pipeline_json = (pdal.Reader.faux("ignored", count=4) | pdal.Writer.null()).toJSON()
+
+    result = validate_pipeline(pipeline_json)
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["valid"] is True
+
+
+def test_lidar_pipeline_run_executes_with_real_pdal_stages():
+    """Test that lidar_pipeline.run executes with real PDAL stages.
+
+    Relies upon pdal.Reader.faux, pdal.Writer.null, pdal.Filter.range, and
+    pdal.Filter.stats being available.
+    """
+    pipeline = LidarPipeline().add(pdal.Filter.range(limits="Z[0:10]"))
+
+    result = pipeline.run(
+        reader=pdal.Reader.faux("ignored", count=4),
+        writer=pdal.Writer.null(),
+    )
+
+    assert isinstance(result, pdal.Pipeline)
+    assert [stage["type"] for stage in json.loads(result.toJSON())] == [
+        "readers.faux",
+        "filters.range",
+        "filters.stats",
+        "writers.null",
+    ]

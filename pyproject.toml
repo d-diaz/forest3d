@@ -56,4 +56,4 @@ exclude = [
 
 [tool.pytest.ini_options]
 addopts = "-q"
-testpaths = ["forest3d/tests"]
+testpaths = ["forest3d"]

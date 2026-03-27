@@ -14,7 +14,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from forest3d.geometry.crown import CrownModel
-from forest3d.geometry.kernels import _polar_to_xy, _theta_z_grid, interp_periodic
+from forest3d.geometry.kernels import interp_periodic, polar_to_xy, theta_z_grid
 from forest3d.geometry.params import CrownHullParams
 from forest3d.geometry.primitives import peripheral_relative
 
@@ -43,7 +43,7 @@ def sample_hull_points(
     anchors = model.anchors
     periph = model.peripheral
 
-    grid_thetas, grid_zs = _theta_z_grid(
+    grid_thetas, grid_zs = theta_z_grid(
         num_theta=num_theta,
         num_z=num_z,
         base_z=model.base.z,
@@ -75,7 +75,7 @@ def sample_hull_points(
 
     cos_grid_thetas = jnp.cos(grid_thetas)
     sin_grid_thetas = jnp.sin(grid_thetas)
-    periph_line_xs, periph_line_ys = _polar_to_xy(
+    periph_line_xs, periph_line_ys = polar_to_xy(
         radii=apex_periph_line_radii,
         cos_theta=cos_grid_thetas,
         sin_theta=sin_grid_thetas,
@@ -120,14 +120,14 @@ def sample_hull_points(
     hull_radii = jnp.where(grid_top, top_hull_radii, bottom_hull_radii)
     cos_bottom_thetas = jnp.cos(bottom_periph_line_thetas)
     sin_bottom_thetas = jnp.sin(bottom_periph_line_thetas)
-    top_grid_xs, top_grid_ys = _polar_to_xy(
+    top_grid_xs, top_grid_ys = polar_to_xy(
         radii=hull_radii,
         cos_theta=cos_grid_thetas,
         sin_theta=sin_grid_thetas,
         center_x=model.apex.x,
         center_y=model.apex.y,
     )
-    bottom_grid_xs, bottom_grid_ys = _polar_to_xy(
+    bottom_grid_xs, bottom_grid_ys = polar_to_xy(
         radii=hull_radii,
         cos_theta=cos_bottom_thetas,
         sin_theta=sin_bottom_thetas,

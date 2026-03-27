@@ -41,7 +41,7 @@ def interp_periodic(
     return jnp.interp(theta, key_theta, values, period=period)
 
 
-def _theta_z_grid(
+def theta_z_grid(
     *, num_theta: int, num_z: int, base_z: Array, apex_z: Array
 ) -> tuple[Array, Array]:
     """Build meshgrid arrays for `(theta, z)` sampling.
@@ -61,7 +61,7 @@ def _theta_z_grid(
     return grid_thetas, grid_zs
 
 
-def _polar_to_xy(
+def polar_to_xy(
     *,
     radii: Array,
     cos_theta: Array,
