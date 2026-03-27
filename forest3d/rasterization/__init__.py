@@ -5,9 +5,10 @@ inputs and geospatial metadata.
 """
 
 from forest3d.rasterization.analytic_dsm import make_analytic_dsm
-from forest3d.rasterization.dsm import make_dsm
+from forest3d.rasterization.dsm import is_codominant_from_dsm, make_dsm
 
 __all__ = [
+    "is_codominant_from_dsm",
     "make_analytic_dsm",
     "make_dsm",
 ]

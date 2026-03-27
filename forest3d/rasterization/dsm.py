@@ -1,11 +1,10 @@
-"""Digital surface model (DSM) rasterization (hot path).
+"""Digital surface model (DSM) rasterization and queries (hot path).
 
-This module provides JAX-friendly rasterization utilities for turning simulated
-point clouds (e.g., crown hull surface points) into a **DSM** raster.
+This module provides JAX-friendly utilities for building a DSM raster from
+simulated point clouds and for querying the resulting raster (e.g., codominance
+classification).
 
-Current definition
-------------------
-For this first pass, DSM is computed as: per-pixel maximum absolute `z` of all
+Current definition: DSM is computed as per-pixel maximum absolute z of all
 points that fall into the pixel (no ground subtraction).
 """
 
@@ -74,3 +73,52 @@ def make_dsm(
     fill_value = jnp.asarray(fill_value, dtype=raster.dtype)
     raster = jnp.where(jnp.isneginf(raster), fill_value, raster)
     return raster
+
+
+def is_codominant_from_dsm(
+    *,
+    dsm: ArrayLike,
+    i: ArrayLike,
+    j: ArrayLike,
+    z_apex: ArrayLike,
+    epsilon: float = 1e-5,
+) -> Array:
+    """Test whether each tree's apex is codominant on a merged DSM.
+
+    For each tree k, reads `dsm[i_k, j_k]` and compares to `z_apex_k`.
+    A tree is codominant when its apex is at or above the height of the DSM
+    at its apex cell.  The test is one-sided:
+
+        dsm[i_k, j_k] - z_apex_k <= epsilon
+
+    Trees overtopped by a neighbor crown (DSM exceeds apex by more than
+    epsilon) are not codominant.
+
+    Args:
+        dsm: Merged analytic DSM array, shape (ny, nx).
+        i: Per-tree row indices into the DSM, shape (B,). Typically from
+            `CoordinateSystem.xyz_to_ijk(..., grid=RASTER, integers=FLOOR)`.
+        j: Per-tree column indices into the DSM, shape (B,).
+        z_apex: Model apex elevation per tree, shape (B,).
+        epsilon: Absolute tolerance for the one-sided test (scalar, >= 0).
+            Defaults to 1e-5 to absorb floating-point rounding.
+
+    Returns:
+        Boolean array of shape (B,). True where
+        `dsm[i_k, j_k] - z_apex_k <= epsilon` and the index is in bounds.
+        Trees whose (i, j) falls outside the DSM shape are marked False.
+    """
+    dsm = jnp.asarray(dsm)
+    i = jnp.asarray(i)
+    j = jnp.asarray(j)
+    z_apex = jnp.asarray(z_apex)
+    ny, nx = dsm.shape
+
+    in_bounds = (i >= 0) & (i < ny) & (j >= 0) & (j < nx)
+
+    i_safe = jnp.where(in_bounds, i, 0)
+    j_safe = jnp.where(in_bounds, j, 0)
+    dsm_at_apex = dsm[i_safe, j_safe]
+
+    match = (dsm_at_apex - z_apex) <= epsilon
+    return in_bounds & match
