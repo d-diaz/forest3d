@@ -16,7 +16,7 @@ simulations and LiDAR-derived DSM rasters:
 
 Benchmarks included
 -------------------
-- `make_dsm` (rasterize pre-generated points): isolates rasterization cost.
+- `make_synthetic_dsm` (rasterize pre-generated points): isolates rasterization cost.
 - End-to-end point-cloud DSM: includes crown hull point generation + rasterization.
 - Analytic DSM: benchmarks the intended parameter container (`CrownSurfaceParams`).
   This path avoids generating a full point cloud, and only calculates a single point
@@ -34,7 +34,7 @@ from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.rasterization.analytic_dsm import (
     make_analytic_dsm,
 )
-from forest3d.rasterization.dsm import make_dsm
+from forest3d.rasterization.dsm import make_synthetic_dsm
 
 
 def _pc_sampling_for_raster(*, dx: float, max_crown_radius: float) -> tuple[int, int]:
@@ -168,11 +168,11 @@ def _make_cs_for_params(
 
 
 @pytest.mark.parametrize("B", [1, 10, 100, 1000])
-def test_bench_make_dsm_from_points(benchmark, B: int):
+def test_bench_make_synthetic_dsm_from_points(benchmark, B: int):
     """Benchmark rasterization cost given a pre-generated (dense) point cloud.
 
-    This isolates the cost of `make_dsm` itself and uses dense sampling (relative
-    to `dx`) to reduce pits.
+    This isolates the cost of `make_synthetic_dsm` itself and uses dense sampling
+    (relative to `dx`) to reduce pits.
     """
     params = _make_batched_hull_params(B)
     cs = _make_cs_for_params(params)
@@ -181,7 +181,7 @@ def test_bench_make_dsm_from_points(benchmark, B: int):
     pts = make_crown_hull_batched(params, num_theta=num_theta, num_z=num_z)  # (B,N,3)
     fill = jnp.asarray(cs.zmin, dtype=jnp.float32)
 
-    g = jax.jit(lambda p: make_dsm(p, cs=cs, fill_value=fill))
+    g = jax.jit(lambda p: make_synthetic_dsm(p, cs=cs, fill_value=fill))
     g(pts).block_until_ready()  # warmup compile
 
     def run():
@@ -193,7 +193,7 @@ def test_bench_make_dsm_from_points(benchmark, B: int):
 
 
 @pytest.mark.parametrize("B", [1, 10, 100, 1000])
-def test_bench_make_dsm_end_to_end(benchmark, B: int):
+def test_bench_make_synthetic_dsm_end_to_end(benchmark, B: int):
     """Benchmark point-cloud DSM end-to-end (hull generation + rasterization).
 
     This measures the full cost of the point-cloud workflow at a sampling density
@@ -206,7 +206,7 @@ def test_bench_make_dsm_end_to_end(benchmark, B: int):
     max_r = 8.0
     num_theta, num_z = _pc_sampling_for_raster(dx=float(cs.dx), max_crown_radius=max_r)
     h = jax.jit(lambda p: make_crown_hull_batched(p, num_theta=num_theta, num_z=num_z))
-    g = jax.jit(lambda pts: make_dsm(pts, cs=cs, fill_value=fill))
+    g = jax.jit(lambda pts: make_synthetic_dsm(pts, cs=cs, fill_value=fill))
 
     # warmup compile
     pts0 = h(params)

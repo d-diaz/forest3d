@@ -169,3 +169,15 @@ def validate_pipeline(pipeline_json: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def is_ept_json(src: str) -> bool:
+    """Check if a file is an EPT JSON file."""
+
+    return src.endswith(".json") and src.endswith("ept.json")
+
+
+def is_las_laz(src: str) -> bool:
+    """Check if a file is a LAS or LAZ file."""
+
+    return src.endswith(".las") or src.endswith(".laz")

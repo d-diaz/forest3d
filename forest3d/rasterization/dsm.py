@@ -18,7 +18,7 @@ from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.geospatial.enums import GridKind, IntegerMode
 
 
-def make_dsm(
+def make_synthetic_dsm(
     points: ArrayLike,
     *,
     cs: CoordinateSystem,

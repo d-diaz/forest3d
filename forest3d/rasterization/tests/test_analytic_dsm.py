@@ -8,7 +8,7 @@ from forest3d.geometry.evaluators.points import make_crown_hull_batched
 from forest3d.geometry.params import CrownHullParams, CrownSurfaceParams
 from forest3d.geospatial.coordinates import CoordinateSystem
 from forest3d.rasterization.analytic_dsm import DsmPixelLocation, make_analytic_dsm
-from forest3d.rasterization.dsm import make_dsm
+from forest3d.rasterization.dsm import make_synthetic_dsm
 
 
 @pytest.fixture
@@ -259,7 +259,7 @@ def test_make_analytic_dsm_close_to_pointcloud_rasterized(forest_params):
 
     fill = np.float32(-1.0)
     dsm_pc = np.asarray(
-        make_dsm(crown_points, cs=cs, fill_value=fill), dtype=np.float32
+        make_synthetic_dsm(crown_points, cs=cs, fill_value=fill), dtype=np.float32
     )
     dsm_an = np.asarray(
         make_analytic_dsm(
@@ -287,9 +287,10 @@ def test_make_analytic_dsm_close_to_pointcloud_rasterized(forest_params):
 
     absdiff = np.abs(dsm_pc[overlap] - dsm_an[overlap])
     # Tie tolerances to vertical grid spacing for interpretability.
-    # `make_dsm` is a max-reduction over sampled points, while `make_analytic_dsm`
-    # samples the continuous surface at cell centers. Differences on the order of
-    # a small multiple of `dz` are expected.
+    # `make_synthetic_dsm` is a max-reduction over sampled points, while
+    # `make_analytic_dsm` samples the continuous surface at cell
+    # centers. Differences on the order of a small multiple of `dz` are
+    # expected.
     dz = float(cs.dz)
     assert float(np.median(absdiff)) < 0.75 * dz
     assert float(np.quantile(absdiff, 0.95)) < 6.0 * dz
