@@ -2,10 +2,10 @@ import numpy as np
 from jax import Array, jit
 
 from forest3d.geospatial.coordinates import CoordinateSystem
-from forest3d.rasterization.dsm import make_dsm
+from forest3d.rasterization.dsm import make_synthetic_dsm
 
 
-def test_make_dsm_max_z_per_pixel():
+def test_make_synthetic_dsm_max_z_per_pixel():
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
         ymin=0.0,
@@ -25,7 +25,7 @@ def test_make_dsm_max_z_per_pixel():
         ],
         dtype=float,
     )
-    raster = make_dsm(pts, cs=cs, fill_value=-1.0)
+    raster = make_synthetic_dsm(pts, cs=cs, fill_value=-1.0)
     assert isinstance(raster, Array)
     assert raster.shape == (2, 2)
     np.testing.assert_allclose(
@@ -40,7 +40,7 @@ def test_make_dsm_max_z_per_pixel():
     )
 
 
-def test_make_dsm_ignores_out_of_bounds_points():
+def test_make_synthetic_dsm_ignores_out_of_bounds_points():
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
         ymin=0.0,
@@ -60,12 +60,12 @@ def test_make_dsm_ignores_out_of_bounds_points():
         ],
         dtype=float,
     )
-    raster = make_dsm(pts, cs=cs, fill_value=-1.0)
+    raster = make_synthetic_dsm(pts, cs=cs, fill_value=-1.0)
     np.testing.assert_allclose(np.asarray(raster)[0, 0], 5.0)
     assert (np.asarray(raster) <= 5.0).all()
 
 
-def test_make_dsm_batched_input_equivalent_to_concatenated():
+def test_make_synthetic_dsm_batched_input_equivalent_to_concatenated():
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
         ymin=0.0,
@@ -92,12 +92,12 @@ def test_make_dsm_batched_input_equivalent_to_concatenated():
     )  # (B=2, N=2, 3)
     pts_concat = pts_batched.reshape((-1, 3))
 
-    r1 = make_dsm(pts_batched, cs=cs, fill_value=-1.0)
-    r2 = make_dsm(pts_concat, cs=cs, fill_value=-1.0)
+    r1 = make_synthetic_dsm(pts_batched, cs=cs, fill_value=-1.0)
+    r2 = make_synthetic_dsm(pts_concat, cs=cs, fill_value=-1.0)
     np.testing.assert_allclose(np.asarray(r1), np.asarray(r2))
 
 
-def test_make_dsm_jittable():
+def test_make_synthetic_dsm_jittable():
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
         ymin=0.0,
@@ -111,12 +111,12 @@ def test_make_dsm_jittable():
     )
     pts = np.array([[0.25, 1.75, 5.0], [1.25, 0.25, 3.0]], dtype=float)
 
-    f = jit(lambda p: make_dsm(p, cs=cs, fill_value=-1.0))
+    f = jit(lambda p: make_synthetic_dsm(p, cs=cs, fill_value=-1.0))
     out = f(pts)
     assert out.shape == (2, 2)
 
 
-def test_make_dsm_ignores_non_finite_points():
+def test_make_synthetic_dsm_ignores_non_finite_points():
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
         ymin=0.0,
@@ -137,16 +137,16 @@ def test_make_dsm_ignores_non_finite_points():
         ],
         dtype=float,
     )
-    raster = make_dsm(pts, cs=cs, fill_value=-1.0)
+    raster = make_synthetic_dsm(pts, cs=cs, fill_value=-1.0)
     assert np.asarray(raster)[0, 0] == 5.0
     assert (np.asarray(raster) >= -1.0).all()
 
 
-def test_make_dsm_preserves_float32_dtype_when_possible():
+def test_make_synthetic_dsm_preserves_float32_dtype_when_possible():
     # Guard against accidental dtype promotion:
-    # `make_dsm` uses -inf as a sentinel during the max-reduction, then replaces
-    # sentinel pixels with `fill_value`. If `fill_value` (or the accumulator) ends
-    # up as float64, the output raster can silently upcast even when point z-values
+    # `make_synthetic_dsm` uses -inf as a sentinel during the max-reduction, then
+    # replaces sentinel pixels with `fill_value`. If `fill_value` (or the accumulator)
+    # ends up as float64, the output raster can silently upcast even when point z-values
     # are float32. This test ensures float32 in -> float32 out when possible.
     cs = CoordinateSystem.from_bounds(
         xmin=0.0,
@@ -160,5 +160,5 @@ def test_make_dsm_preserves_float32_dtype_when_possible():
         dz=1.0,
     )
     pts = np.array([[0.25, 1.75, 5.0]], dtype=np.float32)
-    raster = make_dsm(pts, cs=cs, fill_value=np.float32(-1.0))
+    raster = make_synthetic_dsm(pts, cs=cs, fill_value=np.float32(-1.0))
     assert np.asarray(raster).dtype == np.float32
