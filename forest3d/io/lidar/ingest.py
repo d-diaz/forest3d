@@ -121,7 +121,7 @@ def make_lidar_dem(
     output_type: str = "idw",
     resolution: float = 0.5,
     radius: float = 3.0,
-    window_size=5.0,
+    window_size=30.0,
 ) -> LidarPipeline:
     """Generate a Digital Elevation Model (DEM) from a LAS/LAZ point cloud.
 
@@ -161,7 +161,7 @@ def make_lidar_dem(
 
 
 def make_lidar_dsm(
-    src: str, dst: str, resolution: float = 0.5, radius: float = 3.0
+    src: str, dst: str, resolution: float = 0.5, radius: float = 1.0
 ) -> LidarPipeline:
     """Generate a Digital Surface Model (DSM) from a LAS/LAZ point cloud.
 
