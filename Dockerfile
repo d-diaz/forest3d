@@ -15,5 +15,5 @@ RUN mkdir -p /workspace/forest3d && \
 
 USER ${USER_NAME}
 WORKDIR /workspace/forest3d
-COPY pixi.toml pixi.lock* ./
-RUN pixi install
+COPY --chown=${USER_UID}:${USER_GID} pixi.toml pixi.lock ./
+RUN pixi install --frozen
