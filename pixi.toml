@@ -1,11 +1,11 @@
 [workspace]
 name = "forest3d"
 channels = ["conda-forge"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
 
 [environments]
 dev = ["dev"]
-cuda = ["cuda"]
+cuda = ["cuda"]  # linux-only in practice
 dev-cuda = ["dev", "cuda"]
 
 [dependencies]
@@ -29,10 +29,13 @@ jax = { extras = ["cpu"] }
 laspy = { extras = ["lazrs"] }
 numpyro = "*"
 
+[feature.cuda]
+platforms = ["linux-64"]
+
 [feature.cuda.pypi-dependencies]
 jax = { extras = ["cuda13"] }
 
-[pypi-options]
+[feature.cuda.pypi-options]
 index-url = "https://pypi.org/simple"
 find-links = [{ url = "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html" }]
 
